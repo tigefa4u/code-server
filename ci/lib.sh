@@ -49,6 +49,10 @@ arch() {
   esac
 }
 
+# A helper function to get the artifacts url
+# Takes 1 argument:
+# $1 = environment {string} "staging" | "development" | "production" - which environment this is called in
+# Notes:
 # Grabs the most recent ci.yaml github workflow run that was triggered from the
 # pull request of the release branch for this version (regardless of whether
 # that run succeeded or failed). The release branch name must be in semver
@@ -56,13 +60,39 @@ arch() {
 # This will contain the artifacts we want.
 # https://developer.github.com/v3/actions/workflow-runs/#list-workflow-runs
 get_artifacts_url() {
+  local environment="$1"
+  local branch="$2"
   local artifacts_url
-  local version_branch="v$VERSION"
-  local workflow_runs_url="repos/:owner/:repo/actions/workflows/ci.yaml/runs?event=pull_request&branch=$version_branch"
-  artifacts_url=$(gh api "$workflow_runs_url" | jq -r ".workflow_runs[] | select(.head_branch == \"$version_branch\") | .artifacts_url" | head -n 1)
+  local event
+
+  case $environment in
+    production)
+      # This assumes you're releasing code-server using a branch named `v$VERSION` i.e. `v4.0.1`
+      # If you don't, this will fail.
+      branch="v$VERSION"
+      event="pull_request"
+      ;;
+    staging)
+      branch="main"
+      event="push"
+      ;;
+    development)
+      # Use $branch value passed in in this case
+      event="pull_request"
+      ;;
+    *)
+      # Assume production for default
+      branch="v$VERSION"
+      event="pull_request"
+      ;;
+  esac
+
+  local workflow_runs_url="repos/:owner/:repo/actions/workflows/ci.yaml/runs?event=$event&branch=$branch"
+  artifacts_url=$(gh api "$workflow_runs_url" | jq -r ".workflow_runs[] | select(.head_branch == \"$branch\") | .artifacts_url" | head -n 1)
+
   if [[ -z "$artifacts_url" ]]; then
     echo >&2 "ERROR: artifacts_url came back empty"
-    echo >&2 "We looked for a successful run triggered by a pull_request with for code-server version: $VERSION and a branch named $version_branch"
+    echo >&2 "We looked for a successful run triggered by a pull_request with for code-server version: $VERSION and a branch named $branch"
     echo >&2 "URL used for gh API call: $workflow_runs_url"
     exit 1
   fi
@@ -70,22 +100,36 @@ get_artifacts_url() {
   echo "$artifacts_url"
 }
 
-# Grabs the artifact's download url.
-# https://developer.github.com/v3/actions/artifacts/#list-workflow-run-artifacts
+# A helper function to grab the artifact's download url
+# Takes 2 arguments:
+# $1 = artifact_name {string} - the name of the artifact to download (i.e. "npm-package")
+# $2 = environment {string} "staging" | "development" | "production" - which environment this is called in
+# $3 = branch {string} - the branch name
+# See: https://developer.github.com/v3/actions/artifacts/#list-workflow-run-artifacts
 get_artifact_url() {
   local artifact_name="$1"
-  gh api "$(get_artifacts_url)" | jq -r ".artifacts[] | select(.name == \"$artifact_name\") | .archive_download_url" | head -n 1
+  local environment="$2"
+  local branch="$3"
+  gh api "$(get_artifacts_url "$environment" "$branch")" | jq -r ".artifacts[] | select(.name == \"$artifact_name\") | .archive_download_url" | head -n 1
 }
 
-# Uses the above two functions to download a artifact into a directory.
+# A helper function to download the an artifact into a directory
+# Takes 3 arguments:
+# $1 = artifact_name {string} - the name of the artifact to download (i.e. "npm-package")
+# $2 = destination {string} - where to download the artifact
+# $3 = environment {string} "staging" | "development" | "production" - which environment this is called in
+# $4 = branch {string} - the name of the branch to use when looking for artifacts
 download_artifact() {
   local artifact_name="$1"
   local dst="$2"
+  # We assume production values unless specified
+  local environment="${3:-production}"
+  local branch="${4:v$VERSION}"
 
   local tmp_file
   tmp_file="$(mktemp)"
 
-  gh api "$(get_artifact_url "$artifact_name")" > "$tmp_file"
+  gh api "$(get_artifact_url "$artifact_name" "$environment" "$branch")" > "$tmp_file"
   unzip -q -o "$tmp_file" -d "$dst"
   rm "$tmp_file"
 }

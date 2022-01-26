@@ -191,13 +191,13 @@ jobs:
       - name: Run ./ci/steps/publish-npm.sh
         run: yarn publish:npm
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           # The way this logic works is it checks if the GitHub event is a push to the `main` branch
           # if so, we're in the staging environment (i.e. running in CI on merge into `main`)
           # otherwise it's running in CI on a PR event, meaning development environment
           # Source: https://kevsoft.net/2020/06/10/running-github-action-steps-and-jobs-only-on-push-to-master.html
-          ENVIRONMENT: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && "staging" || "development" }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          ENVIRONMENT: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'staging' || 'development' }}
 
   # TODO: cache building yarn --production
   # possibly 2m30s of savings(?)

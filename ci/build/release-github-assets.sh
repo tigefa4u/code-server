@@ -10,7 +10,7 @@ main() {
   cd "$(dirname "$0")/../.."
   source ./ci/lib.sh
 
-  download_artifact release-packages ./release-packages
+  download_artifact release-packages ./release-packages "production" "v$VERSION"
   local assets=(./release-packages/code-server*"$VERSION"*{.tar.gz,.deb,.rpm})
 
   EDITOR=true gh release upload "v$VERSION" "${assets[@]}" --clobber

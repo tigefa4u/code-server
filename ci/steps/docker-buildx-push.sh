@@ -24,7 +24,7 @@ main() {
   fi
 
   # Download the release-packages artifact
-  download_artifact release-packages ./release-packages
+  download_artifact release-packages ./release-packages "production" "v$VERSION"
 
   # Login to Docker
   if [[ ${CI-} ]]; then
