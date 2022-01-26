@@ -19,6 +19,7 @@ jobs:
       - name: Publish npm package and tag with "latest"
         run: yarn publish:npm
         env:
+          ENVIRONMENT: "production"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 

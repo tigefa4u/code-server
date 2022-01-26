@@ -52,6 +52,7 @@ main() {
   # We need TAG to know what to publish under on npm
   # Options are "latest", "beta", or "<pr number >"
   # See Environment comments above to know when each is used.
+  # TODO@jsjoeio - we need to determine this ourselves
   if ! is_env_var_set "NPM_TAG"; then
     echo "NPM_TAG is not set. This is needed for tagging the npm release."
     exit 1
@@ -64,6 +65,10 @@ main() {
     echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
   fi
 
+  # TODO@jsjoeio we need to refactor to download this based on environment
+  # for "development", use the branch artifacts
+  # for "staging" (merges into main),
+  # for "production" look for release branch (currently we do this)
   download_artifact npm-package ./release-npm-package
   # https://github.com/actions/upload-artifact/issues/38
   tar -xzf release-npm-package/package.tar.gz
