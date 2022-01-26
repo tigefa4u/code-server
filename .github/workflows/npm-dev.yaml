@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Run ./ci/steps/publish-npm.sh
+      - name: Publish npm-package
         run: yarn publish:npm
         env:
           ENVIRONMENT: "development"

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# TODOs refactor this to determine ENVIRONMENT, NPM_TAG and NPM_VERSION
+
 main() {
   cd "$(dirname "$0")/../.."
   source ./ci/lib.sh
