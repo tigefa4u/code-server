@@ -54,8 +54,8 @@ main() {
   fi
 
   # We use this to grab the branch name
-  if ! is_env_var_set "GITHUB_REF_NAME"; then
-    echo "GITHUB_REF_NAME is not set. Are you running this locally? We rely on values provided by GitHub."
+  if ! is_env_var_set "GITHUB_HEAD_REF"; then
+    echo "GITHUB_HEAD_REF is not set. Are you running this locally? We rely on values provided by GitHub."
     exit 1
   fi
 
@@ -74,7 +74,8 @@ main() {
   # There is no BRANCH so branch will be empty which is why
   # we set a default.
   # Source:https://docs.github.com/en/actions/learn-github-actions/environment-variables#default-environment-variables
-  BRANCH="${GITHUB_REF_NAME-main}"
+  BRANCH="${GITHUB_HEAD_REF-main}"
+  echo "Calling download_artifact with npm env: $NPM_ENVIRONMENT and branch: $BRANCH"
   download_artifact npm-package ./release-npm-package "$NPM_ENVIRONMENT" "$BRANCH"
   # https://github.com/actions/upload-artifact/issues/38
   tar -xzf release-npm-package/package.tar.gz
