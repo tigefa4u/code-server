@@ -127,7 +127,8 @@ download_artifact() {
   # We assume production values unless specified
   local environment="${3-production}"
   local branch="${4-v$VERSION}"
-  local artifacts_url="$(get_artifact_url "$artifact_name" "$environment" "$branch")"
+  local artifacts_url
+  artifacts_url="$(get_artifact_url "$artifact_name" "$environment" "$branch")"
 
   echo "Inside download_artifact"
   echo "Using the following values:"
