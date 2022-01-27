@@ -97,6 +97,8 @@ get_artifacts_url() {
     exit 1
   fi
 
+  echo >&2 "Using this artifacts url: $artifacts_url"
+
   echo "$artifacts_url"
 }
 
@@ -125,11 +127,20 @@ download_artifact() {
   # We assume production values unless specified
   local environment="${3-production}"
   local branch="${4-v$VERSION}"
+  local artifacts_url="$(get_artifact_url "$artifact_name" "$environment" "$branch")"
+
+  echo "Inside download_artifact"
+  echo "Using the following values:"
+  echo "-artifact_name: $artifact_name"
+  echo "-dst: $dst"
+  echo "-environment: $environment"
+  echo "-branch: $branch"
+  echo "-artifacts_url: $artifacts_url"
 
   local tmp_file
   tmp_file="$(mktemp)"
 
-  gh api "$(get_artifact_url "$artifact_name" "$environment" "$branch")" > "$tmp_file"
+  gh api "$artifacts_url" > "$tmp_file"
   unzip -q -o "$tmp_file" -d "$dst"
   rm "$tmp_file"
 }
