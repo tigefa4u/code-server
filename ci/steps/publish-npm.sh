@@ -98,7 +98,7 @@ main() {
     echo "Found environment: $NPM_ENVIRONMENT"
     echo "Manually bumping npm version..."
 
-    if [[ "$NPM_ENVIRONMENT" == "beta" ]]; then
+    if [[ "$NPM_ENVIRONMENT" == "staging" ]]; then
       NPM_VERSION="$VERSION-beta-$COMMIT_SHA"
       # This means the npm version will be tagged with "beta"
       # and installed when a user runs `yarn install code-server@beta`
