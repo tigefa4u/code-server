@@ -74,7 +74,7 @@ main() {
   # There is no BRANCH so branch will be empty which is why
   # we set a default.
   # Source:https://docs.github.com/en/actions/learn-github-actions/environment-variables#default-environment-variables
-  BRANCH="${GITHUB_REF_NAME:main}"
+  BRANCH="${GITHUB_REF_NAME-main}"
   download_artifact npm-package ./release-npm-package "$NPM_ENVIRONMENT" "$BRANCH"
   # https://github.com/actions/upload-artifact/issues/38
   tar -xzf release-npm-package/package.tar.gz

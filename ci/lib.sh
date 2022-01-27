@@ -123,8 +123,8 @@ download_artifact() {
   local artifact_name="$1"
   local dst="$2"
   # We assume production values unless specified
-  local environment="${3:-production}"
-  local branch="${4:v$VERSION}"
+  local environment="${3-production}"
+  local branch="${4-v$VERSION}"
 
   local tmp_file
   tmp_file="$(mktemp)"
