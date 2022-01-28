@@ -76,7 +76,11 @@ main() {
   # Source:https://docs.github.com/en/actions/learn-github-actions/environment-variables#default-environment-variables
   BRANCH="${GITHUB_HEAD_REF-main}"
   echo "Calling download_artifact with npm env: $NPM_ENVIRONMENT and branch: $BRANCH"
-  download_artifact npm-package ./release-npm-package "$NPM_ENVIRONMENT" "$BRANCH"
+  # download_artifact npm-package ./release-npm-package "$NPM_ENVIRONMENT" "$BRANCH"
+  # NOTES@jsjoeio testing an approach where we run this script after downloading the artifact
+  # in a job in the workflow file itself
+  unzip -q -o "tmp-npm-package-dir" -d "./release-npm-package"
+
   # https://github.com/actions/upload-artifact/issues/38
   tar -xzf release-npm-package/package.tar.gz
 

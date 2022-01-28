@@ -130,8 +130,7 @@ download_artifact() {
   local artifacts_url
   artifacts_url="$(get_artifact_url "$artifact_name" "$environment" "$branch")"
 
-  echo "Inside download_artifact"
-  echo "Using the following values:"
+  echo "Using the following values to download artifact:"
   echo "-artifact_name: $artifact_name"
   echo "-dst: $dst"
   echo "-environment: $environment"
