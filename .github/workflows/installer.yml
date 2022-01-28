@@ -3,12 +3,12 @@ name: Installer integration
 on:
   push:
     branches:
-      - main
+      - gitpod
     paths:
       - "install.sh"
   pull_request:
     branches:
-      - main
+      - gitpod
     paths:
       - "install.sh"
 

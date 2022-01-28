@@ -15,7 +15,7 @@ coverage:
         threshold: 1%
         only_pulls: false
         branches:
-          - "main"
+          - "gitpod"
 
 parsers:
   gcov:

@@ -7,7 +7,7 @@ on:
 
   push:
     branches:
-      - main
+      - gitpod
 
 jobs:
   # NOTE: this job requires curl, jq and yarn
@@ -24,6 +24,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TAG: "beta"
-          # Since this only runs on a merge into main, we can't use github.event.number
+          # Since this only runs on a merge into gitpod, we can't use github.event.number
           # so we instead use the word "beta" and the PR merge commit SHA
           PR_NUMBER_AND_COMMIT_SHA: beta-${{ github.sha }}

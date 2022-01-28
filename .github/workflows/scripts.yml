@@ -3,13 +3,13 @@ name: Script unit tests
 on:
   push:
     branches:
-      - main
+      - gitpod
     paths:
       - "**.sh"
       - "**.bats"
   pull_request:
     branches:
-      - main
+      - gitpod
     paths:
       - "**.sh"
       - "**.bats"

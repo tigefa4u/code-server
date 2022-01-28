@@ -3,7 +3,7 @@ name: Docs preview
 on:
   pull_request:
     branches:
-      - main
+      - gitpod
 
 permissions:
   actions: none
@@ -60,7 +60,7 @@ jobs:
           VERCEL_ORG_ID: team_tGkWfhEGGelkkqUUm9nXq17r
           VERCEL_PROJECT_ID: QmZRucMRh3GFk1817ZgXjRVuw5fhTspHPHKct3JNQDEPGd
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          CODE_SERVER_DOCS_MAIN_BRANCH: ${{ github.event.pull_request.head.sha }}
+          CODE_SERVER_DOCS_gitpod_BRANCH: ${{ github.event.pull_request.head.sha }}
 
       - name: Install node_modules
         run: yarn install
