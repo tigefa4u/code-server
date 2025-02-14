@@ -68,13 +68,10 @@ describe("login", () => {
       }
     })
 
-    it("should return HTML with 'Missing password' message", async () => {
+    it("should return 'Missing password' without body", async () => {
       const resp = await codeServer().fetch("/login", { method: "POST" })
-
-      expect(resp.status).toBe(200)
-
       const htmlContent = await resp.text()
-
+      expect(resp.status).toBe(200)
       expect(htmlContent).toContain("Missing password")
     })
 
@@ -91,6 +88,63 @@ describe("login", () => {
       const htmlContent = await resp.text()
 
       expect(htmlContent).toContain("Incorrect password")
+    })
+
+    it("should return correct app-name", async () => {
+      process.env.PASSWORD = previousEnvPassword
+      const appName = "testnäme"
+      const codeServer = await integration.setup([`--app-name=${appName}`], "")
+      const resp = await codeServer.fetch("/login", { method: "GET" })
+
+      const htmlContent = await resp.text()
+      expect(resp.status).toBe(200)
+      expect(htmlContent).toContain(`${appName}</h1>`)
+      expect(htmlContent).toContain(`<title>${appName} login</title>`)
+    })
+
+    it("should return correct app-name when unset", async () => {
+      process.env.PASSWORD = previousEnvPassword
+      const appName = "code-server"
+      const codeServer = await integration.setup([], "")
+      const resp = await codeServer.fetch("/login", { method: "GET" })
+
+      const htmlContent = await resp.text()
+      expect(resp.status).toBe(200)
+      expect(htmlContent).toContain(`${appName}</h1>`)
+      expect(htmlContent).toContain(`<title>${appName} login</title>`)
+    })
+
+    it("should return correct welcome text", async () => {
+      process.env.PASSWORD = previousEnvPassword
+      const welcomeText = "Welcome to your code workspace! öäü🔐"
+      const codeServer = await integration.setup([`--welcome-text=${welcomeText}`], "")
+      const resp = await codeServer.fetch("/login", { method: "GET" })
+
+      const htmlContent = await resp.text()
+      expect(resp.status).toBe(200)
+      expect(htmlContent).toContain(welcomeText)
+    })
+
+    it("should return correct welcome text when none is set but app-name is", async () => {
+      process.env.PASSWORD = previousEnvPassword
+      const appName = "testnäme"
+      const codeServer = await integration.setup([`--app-name=${appName}`], "")
+      const resp = await codeServer.fetch("/login", { method: "GET" })
+
+      const htmlContent = await resp.text()
+      expect(resp.status).toBe(200)
+      expect(htmlContent).toContain(`Welcome to ${appName}`)
+    })
+
+    it("should return correct welcome text when locale is set to non-English", async () => {
+      process.env.PASSWORD = previousEnvPassword
+      const locale = "zh-cn"
+      const codeServer = await integration.setup([`--locale=${locale}`], "")
+      const resp = await codeServer.fetch("/login", { method: "GET" })
+
+      const htmlContent = await resp.text()
+      expect(resp.status).toBe(200)
+      expect(htmlContent).toContain(`欢迎来到 code-server`)
     })
   })
 })

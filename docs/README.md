@@ -1,11 +1,12 @@
 # code-server
 
-[!["GitHub Discussions"](https://img.shields.io/badge/%20GitHub-%20Discussions-gray.svg?longCache=true&logo=github&colorB=purple)](https://github.com/coder/code-server/discussions) [!["Join us on Slack"](https://img.shields.io/badge/join-us%20on%20slack-gray.svg?longCache=true&logo=slack&colorB=brightgreen)](https://cdr.co/join-community) [![Twitter Follow](https://img.shields.io/twitter/follow/CoderHQ?label=%40CoderHQ&style=social)](https://twitter.com/coderhq) [![codecov](https://codecov.io/gh/coder/code-server/branch/main/graph/badge.svg?token=5iM9farjnC)](https://codecov.io/gh/coder/code-server) [![See v4.0.2 docs](https://img.shields.io/static/v1?label=Docs&message=see%20v4.0.2%20&color=blue)](https://github.com/coder/code-server/tree/v4.0.2/docs)
+[!["GitHub Discussions"](https://img.shields.io/badge/%20GitHub-%20Discussions-gray.svg?longCache=true&logo=github&colorB=purple)](https://github.com/coder/code-server/discussions) [!["Join us on Slack"](https://img.shields.io/badge/join-us%20on%20slack-gray.svg?longCache=true&logo=slack&colorB=brightgreen)](https://coder.com/community) [![Twitter Follow](https://img.shields.io/twitter/follow/CoderHQ?label=%40CoderHQ&style=social)](https://twitter.com/coderhq) [![codecov](https://codecov.io/gh/coder/code-server/branch/main/graph/badge.svg?token=5iM9farjnC)](https://codecov.io/gh/coder/code-server) [![See latest](https://img.shields.io/static/v1?label=Docs&message=see%20latest&color=blue)](https://coder.com/docs/code-server/latest)
 
 Run [VS Code](https://github.com/Microsoft/vscode) on any machine anywhere and
 access it in the browser.
 
-![Screenshot](./assets/screenshot.png)
+![Screenshot](./assets/screenshot-1.png)
+![Screenshot](./assets/screenshot-2.png)
 
 ## Highlights
 
@@ -14,19 +15,16 @@ access it in the browser.
 - Preserve battery life when you're on the go; all intensive tasks run on your
   server
 
-| 🔔 code-server is a free browser-based IDE while [Coder](https://coder.com/) is our enterprise developer workspace platform. For more information, visit [Coder.com](https://coder.com/docs/comparison)
-| ---
-
 ## Requirements
 
-See [requirements](requirements.md) for minimum specs, as well as instructions
+See [requirements](https://coder.com/docs/code-server/latest/requirements) for minimum specs, as well as instructions
 on how to set up a Google VM on which you can install code-server.
 
-**TL;DR:** Linux machine with WebSockets enabled, 1 GB RAM, and 2 CPUs
+**TL;DR:** Linux machine with WebSockets enabled, 1 GB RAM, and 2 vCPUs
 
 ## Getting started
 
-There are three ways to get started:
+There are four ways to get started:
 
 1. Using the [install
    script](https://github.com/coder/code-server/blob/main/install.sh), which
@@ -34,7 +32,8 @@ There are three ways to get started:
    possible.
 2. Manually [installing
    code-server](https://coder.com/docs/code-server/latest/install)
-3. Using our one-click buttons and guides to [deploy code-server to a cloud
+3. Deploy code-server to your team with [coder/coder](https://cdr.co/coder-github)
+4. Using our one-click buttons and guides to [deploy code-server to a cloud
    provider](https://github.com/coder/deploy-code-server) ⚡
 
 If you use the install script, you can preview what occurs during the install
@@ -52,6 +51,9 @@ curl -fsSL https://code-server.dev/install.sh | sh
 
 When done, the install script prints out instructions for running and starting
 code-server.
+
+> **Note**
+> To manage code-server for a team on your infrastructure, see: [coder/coder](https://cdr.co/coder-github)
 
 We also have an in-depth [setup and
 configuration](https://coder.com/docs/code-server/latest/guide) guide.
@@ -71,7 +73,7 @@ details.
 Interested in [working at Coder](https://coder.com/careers)? Check out [our open
 positions](https://coder.com/careers#openings)!
 
-## For Organizations
+## For Teams
 
-Want remote development for your organization or enterprise? Visit [our
-website](https://coder.com) to learn more about Coder.
+We develop [coder/coder](https://cdr.co/coder-github) to help teams to
+adopt remote development.

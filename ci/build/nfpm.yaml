@@ -4,11 +4,11 @@ platform: "linux"
 version: "v${VERSION}"
 section: "devel"
 priority: "optional"
-maintainer: "Anmol Sethi <hi@nhooyr.io>"
+maintainer: "Joe Previte <joe@coder.com>"
 description: |
   Run VS Code in the browser.
 vendor: "Coder"
-homepage: "https://github.com/cdr/code-server"
+homepage: "https://github.com/coder/code-server"
 license: "MIT"
 
 contents:
@@ -22,4 +22,4 @@ contents:
     dst: /usr/lib/systemd/user/code-server.service
 
   - src: ./release-standalone/*
-    dst: /usr/lib/code-server/
+    dst: /usr/lib/code-server

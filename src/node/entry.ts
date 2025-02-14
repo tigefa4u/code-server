@@ -1,7 +1,7 @@
 import { logger } from "@coder/logger"
 import { optionDescriptions, parse, readConfigFile, setDefaults, shouldOpenInExistingInstance } from "./cli"
-import { commit, version } from "./constants"
-import { openInExistingInstance, runCodeServer, runVsCodeCli, shouldSpawnCliProcess } from "./main"
+import { getVersionString, getVersionJsonString } from "./constants"
+import { openInExistingInstance, runCodeServer, runCodeCli, shouldSpawnCliProcess } from "./main"
 import { isChild, wrapper } from "./wrapper"
 
 async function entry(): Promise<void> {
@@ -24,7 +24,7 @@ async function entry(): Promise<void> {
   const args = await setDefaults(cliArgs, configArgs)
 
   if (args.help) {
-    console.log("code-server", version, commit)
+    console.log("code-server", getVersionString())
     console.log("")
     console.log(`Usage: code-server [options] [path]`)
     console.log(`    - Opening a directory: code-server ./path/to/your/project`)
@@ -39,25 +39,19 @@ async function entry(): Promise<void> {
 
   if (args.version) {
     if (args.json) {
-      console.log(
-        JSON.stringify({
-          codeServer: version,
-          commit,
-          vscode: require("../../vendor/modules/code-oss-dev/package.json").version,
-        }),
-      )
+      console.log(getVersionJsonString())
     } else {
-      console.log(version, commit)
+      console.log(getVersionString())
     }
     return
   }
 
   if (shouldSpawnCliProcess(args)) {
     logger.debug("Found VS Code arguments; spawning VS Code CLI")
-    return runVsCodeCli(args)
+    return runCodeCli(args)
   }
 
-  const socketPath = await shouldOpenInExistingInstance(cliArgs)
+  const socketPath = await shouldOpenInExistingInstance(cliArgs, args["session-socket"])
   if (socketPath) {
     logger.debug("Trying to open in existing instance")
     return openInExistingInstance(args, socketPath)

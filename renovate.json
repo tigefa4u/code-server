@@ -6,9 +6,16 @@
       "matchUpdateTypes": ["minor", "patch", "digest"],
       "automerge": true,
       "groupName": "Minor dependency updates"
+    },
+    {
+      "matchDepTypes": ["peerDependencies"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "automerge": true,
+      "groupName": "Peer dependency updates"
     }
   ],
   "vulnerabilityAlerts": {
     "enabled": "true"
-  }
+  },
+  "ignoreDeps": ["express", "ansi-regex", "env-paths", "limiter", "node", "prettier"]
 }

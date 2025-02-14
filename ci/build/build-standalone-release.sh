@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Once we have an NPM package, use this script to copy it to a separate
+# directory (./release-standalone) and install the dependencies.  This new
+# directory can then be packaged as a platform-specific release.
+
 main() {
   cd "$(dirname "${0}")/../.."
 
@@ -9,28 +13,25 @@ main() {
   rsync "$RELEASE_PATH/" "$RELEASE_PATH-standalone"
   RELEASE_PATH+=-standalone
 
-  # We cannot find the path to node from $PATH because yarn shims a script to ensure
-  # we use the same version it's using so we instead run a script with yarn that
-  # will print the path to node.
+  # Package managers may shim their own "node" wrapper into the PATH, so run
+  # node and ask it for its true path.
   local node_path
-  node_path="$(yarn -s node <<< 'console.info(process.execPath)')"
+  node_path="$(node <<< 'console.info(process.execPath)')"
 
   mkdir -p "$RELEASE_PATH/bin"
   mkdir -p "$RELEASE_PATH/lib"
   rsync ./ci/build/code-server.sh "$RELEASE_PATH/bin/code-server"
   rsync "$node_path" "$RELEASE_PATH/lib/node"
 
-  ln -s "./bin/code-server" "$RELEASE_PATH/code-server"
-  ln -s "./lib/node" "$RELEASE_PATH/node"
+  chmod 755 "$RELEASE_PATH/lib/node"
 
-  cd "$RELEASE_PATH"
-  yarn --production --frozen-lockfile
-
-  # HACK: the version of Typescript vscode 1.57 uses in extensions/
-  # leaves a few stray symlinks. Clean them up so nfpm does not fail.
-  # Remove this line when its no longer needed.
-
-  rm -fr "$RELEASE_PATH/vendor/modules/code-oss-dev/extensions/node_modules/.bin"
+  pushd "$RELEASE_PATH"
+  npm install --unsafe-perm --omit=dev
+  # Code deletes some files from the extension node_modules directory which
+  # leaves broken symlinks in the corresponding .bin directory.  nfpm will fail
+  # on these broken symlinks so clean them up.
+  rm -fr "./lib/vscode/extensions/node_modules/.bin"
+  popd
 }
 
 main "$@"

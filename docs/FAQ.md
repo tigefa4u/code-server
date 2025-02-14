@@ -1,3 +1,4 @@
+<!-- prettier-ignore-start -->
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 # FAQ
@@ -13,6 +14,7 @@
 - [How do I install an extension manually?](#how-do-i-install-an-extension-manually)
 - [How do I use my own extensions marketplace?](#how-do-i-use-my-own-extensions-marketplace)
 - [Where are extensions stored?](#where-are-extensions-stored)
+- [Where is VS Code configuration stored?](#where-is-vs-code-configuration-stored)
 - [How can I reuse my VS Code configuration?](#how-can-i-reuse-my-vs-code-configuration)
 - [How does code-server decide what workspace or folder to open?](#how-does-code-server-decide-what-workspace-or-folder-to-open)
 - [How do I access my Documents/Downloads/Desktop folders in code-server on macOS?](#how-do-i-access-my-documentsdownloadsdesktop-folders-in-code-server-on-macos)
@@ -25,19 +27,25 @@
 - [Is multi-tenancy possible?](#is-multi-tenancy-possible)
 - [Can I use Docker in a code-server container?](#can-i-use-docker-in-a-code-server-container)
 - [How do I disable telemetry?](#how-do-i-disable-telemetry)
+- [What's the difference between code-server and Coder?](#whats-the-difference-between-code-server-and-coder)
 - [What's the difference between code-server and Theia?](#whats-the-difference-between-code-server-and-theia)
 - [What's the difference between code-server and OpenVSCode-Server?](#whats-the-difference-between-code-server-and-openvscode-server)
 - [What's the difference between code-server and GitHub Codespaces?](#whats-the-difference-between-code-server-and-github-codespaces)
 - [Does code-server have any security login validation?](#does-code-server-have-any-security-login-validation)
 - [Are there community projects involving code-server?](#are-there-community-projects-involving-code-server)
 - [How do I change the port?](#how-do-i-change-the-port)
+- [How do I hide the coder/coder promotion in Help: Getting Started?](#how-do-i-hide-the-codercoder-promotion-in-help-getting-started)
+- [How do I disable the proxy?](#how-do-i-disable-the-proxy)
+- [How do I disable file download?](#how-do-i-disable-file-download)
+- [Why do web views not work?](#why-do-web-views-not-work)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
+<!-- prettier-ignore-end -->
 
 ## Questions?
 
 Please file all questions and support requests at
-<https://github.com/cdr/code-server/discussions>.
+<https://github.com/coder/code-server/discussions>.
 
 ## How should I expose code-server to the internet?
 
@@ -83,6 +91,12 @@ app (PWA):
 1. Start the editor
 2. Click the **plus** icon in the URL toolbar to install the PWA
 
+If you use Firefox, you can use the appropriate extension to install PWA.
+
+1. Go to the installation [website](https://addons.mozilla.org/en-US/firefox/addon/pwas-for-firefox/) of the add-on
+2. Add the add-on to Firefox
+3. Follow the os-specific instructions on how to install the runtime counterpart
+
 For other browsers, you'll have to remap keybindings for shortcuts to work.
 
 ## Why can't code-server use Microsoft's extension marketplace?
@@ -111,11 +125,11 @@ These are the closed-source extensions that are presently unavailable:
 
 1. [Live Share](https://visualstudio.microsoft.com/services/live-share). We may
    implement something similar (see
-   [#33](https://github.com/cdr/code-server/issues/33))
+   [#33](https://github.com/coder/code-server/issues/33))
 1. [Remote Extensions (SSH, Containers,
    WSL)](https://github.com/microsoft/vscode-remote-release). We may implement
    these again at some point, see
-   ([#1315](https://github.com/cdr/code-server/issues/1315)).
+   ([#1315](https://github.com/coder/code-server/issues/1315)).
 
 For more about the closed source portions of VS Code, see [vscodium/vscodium](https://github.com/VSCodium/vscodium#why-does-this-exist).
 
@@ -164,10 +178,10 @@ If you own a marketplace that implements the VS Code Extension Gallery API, you
 can point code-server to it by setting `$EXTENSIONS_GALLERY`.
 This corresponds directly with the `extensionsGallery` entry in in VS Code's `product.json`.
 
-For example, to use the legacy Coder extensions marketplace:
+For example:
 
 ```bash
-export EXTENSIONS_GALLERY='{"serviceUrl": "https://extensions.coder.com/api"}'
+export EXTENSIONS_GALLERY='{"serviceUrl": "https://my-extensions/api"}'
 ```
 
 Though you can technically use Microsoft's marketplace in this manner, we
@@ -180,10 +194,20 @@ docs](https://github.com/VSCodium/vscodium/blob/master/DOCS.md#extensions--marke
 
 ## Where are extensions stored?
 
-Extensions are store, by default, to `~/.local/share/code-server/extensions`.
+Extensions are stored in `~/.local/share/code-server/extensions` by default.
 
-If you set the `XDG_DATA_HOME` environment variable, the data directory will be
-`$XDG_DATA_HOME/code-server/extensions`. In general, we try to follow the XDG directory spec.
+On Linux and macOS if you set the `XDG_DATA_HOME` environment variable, the
+extensions directory will be `$XDG_DATA_HOME/code-server/extensions`. In
+general, we try to follow the XDG directory spec.
+
+## Where is VS Code configuration stored?
+
+VS Code configuration such as settings and keybindings are stored in
+`~/.local/share/code-server` by default.
+
+On Linux and macOS if you set the `XDG_DATA_HOME` environment variable, the data
+directory will be `$XDG_DATA_HOME/code-server`. In general, we try to follow the
+XDG directory spec.
 
 ## How can I reuse my VS Code configuration?
 
@@ -222,7 +246,7 @@ You may have to give Node.js full disk access, since it doesn't implement any of
    Privacy** > **Privacy** > **Full Disk Access**. Then, click the 🔒 to unlock,
    click **+**, and select the Node.js binary you located in the previous step.
 
-See [#2794](https://github.com/cdr/code-server/issues/2794) for additional context.
+See [#2794](https://github.com/coder/code-server/issues/2794) for additional context.
 
 ## How do I direct server-side requests through a proxy?
 
@@ -302,7 +326,7 @@ after a predetermined amount of time, you can do so by checking continuously for
 the last modified time on the heartbeat file. If it is older than X minutes (or
 whatever amount of time you'd like), you can kill code-server.
 
-Eventually, [#1636](https://github.com/cdr/code-server/issues/1636) will make
+Eventually, [#1636](https://github.com/coder/code-server/issues/1636) will make
 this process better.
 
 ## How do I change the password?
@@ -333,6 +357,12 @@ hashed-password: "$argon2i$v=19$m=4096,t=3,p=1$wST5QhBgk2lu1ih4DMuxvg$LS1alrVdIW
 
 The `hashed-password` field takes precedence over `password`.
 
+If you're using Docker Compose file, in order to make this work, you need to change all the single $ to $$. For example:
+
+```yaml
+- HASHED_PASSWORD=$$argon2i$$v=19$$m=4096,t=3,p=1$$wST5QhBgk2lu1ih4DMuxvg$$LS1alrVdIWtvZHwnzCM1DUGg+5DTO3Dt1d5v9XtLws4
+```
+
 ## Is multi-tenancy possible?
 
 If you want to run multiple code-servers on shared infrastructure, we recommend
@@ -359,6 +389,15 @@ Use the `--disable-telemetry` flag to disable telemetry.
 
 > We use the data collected only to improve code-server.
 
+## What's the difference between code-server and Coder?
+
+code-server and Coder are both applications that can be installed on any
+machine. The main difference is who they serve. Out of the box, code-server is
+simply VS Code in the browser while Coder is a tool for provisioning remote
+development environments via Terraform.
+
+code-server was built for individuals while Coder was built for teams. In Coder, you create Workspaces which can have applications like code-server. If you're looking for a team solution, you should reach for [Coder](https://github.com/coder/coder).
+
 ## What's the difference between code-server and Theia?
 
 At a high level, code-server is a patched fork of VS Code that runs in the
@@ -376,19 +415,13 @@ Theia doesn't allow you to reuse your existing VS Code config.
 ## What's the difference between code-server and OpenVSCode-Server?
 
 code-server and OpenVSCode-Server both allow you to access VS Code via a
-browser. The two projects also use their own [forks of VS Code](https://github.com/cdr/vscode) to
-leverage modern VS Code APIs and stay up to date with the upsteam version.
+browser. OpenVSCode-Server is a direct fork of VS Code with changes comitted
+directly while code-server pulls VS Code in via a submodule and makes changes
+via patch files.
 
-However, OpenVSCode-Server is scoped at only making VS Code available in the web browser.
-code-server includes some other features:
-
-- password auth
-- proxy web ports
-- certificate support
-- plugin API
-- settings sync (coming soon)
-
-For more details, see [this discussion post](https://github.com/cdr/code-server/discussions/4267#discussioncomment-1411583).
+However, OpenVSCode-Server is scoped at only making VS Code available as-is in
+the web browser. code-server contains additional changes to make the self-hosted
+experience better (see the next section for details).
 
 ## What's the difference between code-server and GitHub Codespaces?
 
@@ -396,8 +429,24 @@ Both code-server and GitHub Codespaces allow you to access VS Code via a
 browser. GitHub Codespaces, however, is a closed-source, paid service offered by
 GitHub and Microsoft.
 
-On the other hand, code-server is self-hosted, free, open-source, and
-can be run on any machine with few limitations.
+On the other hand, code-server is self-hosted, free, open-source, and can be run
+on any machine with few limitations.
+
+Specific changes include:
+
+- Password authentication
+- The ability to host at sub-paths
+- Self-contained web views that do not call out to Microsoft's servers
+- The ability to use your own marketplace and collect your own telemetry
+- Built-in proxy for accessing ports on the remote machine integrated into
+  VS Code's ports panel
+- Wrapper process that spawns VS Code on-demand and has a separate CLI
+- Notification when updates are available
+- [Some other things](https://github.com/coder/code-server/tree/main/patches)
+
+Some of these changes appear very unlikely to ever be adopted by Microsoft.
+Some may make their way upstream, further closing the gap, but at the moment it
+looks like there will always be some subtle differences.
 
 ## Does code-server have any security login validation?
 
@@ -406,7 +455,7 @@ minute plus an additional twelve per hour.
 
 ## Are there community projects involving code-server?
 
-Visit the [awesome-code-server](https://github.com/cdr/awesome-code-server)
+Visit the [awesome-code-server](https://github.com/coder/awesome-code-server)
 repository to view community projects and guides with code-server! Feel free to
 add your own!
 
@@ -416,3 +465,45 @@ There are two ways to change the port on which code-server runs:
 
 1. with an environment variable e.g. `PORT=3000 code-server`
 2. using the flag `--bind-addr` e.g. `code-server --bind-addr localhost:3000`
+
+## How do I hide the coder/coder promotion in Help: Getting Started?
+
+You can pass the flag `--disable-getting-started-override` to `code-server` or
+you can set the environment variable `CS_DISABLE_GETTING_STARTED_OVERRIDE=1` or
+`CS_DISABLE_GETTING_STARTED_OVERRIDE=true`.
+
+## How do I disable the proxy?
+
+You can pass the flag `--disable-proxy` to `code-server` or
+you can set the environment variable `CS_DISABLE_PROXY=1` or
+`CS_DISABLE_PROXY=true`.
+
+Note, this option currently only disables the proxy routes to forwarded ports, including
+the domain and path proxy routes over HTTP and WebSocket; however, it does not
+disable the automatic port forwarding in the VS Code workbench itself. In other words,
+user will still see the Ports tab and notifications, but will not be able to actually
+use access the ports. It is recommended to set `remote.autoForwardPorts` to `false`
+when using the option.
+
+## How do I disable file download?
+
+You can pass the flag `--disable-file-downloads` to `code-server`
+
+## Why do web views not work?
+
+Web views rely on service workers, and service workers are only available in a
+secure context, so most likely the answer is that you are using an insecure
+context (for example an IP address).
+
+If this happens, in the browser log you will see something like:
+
+> Error loading webview: Error: Could not register service workers: SecurityError: Failed to register a ServiceWorker for scope with script: An SSL certificate error occurred when fetching the script..
+
+To fix this, you must either:
+
+- Access over localhost/127.0.0.1 which is always considered secure.
+- Use a domain with a real certificate (for example with Let's Encrypt).
+- Use a trusted self-signed certificate with [mkcert](https://mkcert.dev) (or
+  create and trust a certificate manually).
+- Disable security if your browser allows it. For example, in Chromium see
+  `chrome://flags/#unsafely-treat-insecure-origin-as-secure`

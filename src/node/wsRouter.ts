@@ -8,13 +8,14 @@ export const handleUpgrade = (app: express.Express, server: http.Server): void =
   server.on("upgrade", (req, socket, head) => {
     socket.pause()
 
-    req.ws = socket
-    req.head = head
-    req._ws_handled = false
+    const wreq = req as InternalWebsocketRequest
+    wreq.ws = socket
+    wreq.head = head
+    wreq._ws_handled = false
 
     // Send the request off to be handled by Express.
-    ;(app as any).handle(req, new http.ServerResponse(req), () => {
-      if (!req._ws_handled) {
+    ;(app as any).handle(wreq, new http.ServerResponse(wreq), () => {
+      if (!wreq._ws_handled) {
         socket.end("HTTP/1.1 404 Not Found\r\n\r\n")
       }
     })
@@ -31,6 +32,9 @@ export class WebsocketRouter {
   /**
    * Handle a websocket at this route. Note that websockets are immediately
    * paused when they come in.
+   *
+   * If the origin header exists it must match the host or the connection will
+   * be prevented.
    */
   public ws(route: expressCore.PathParams, ...handlers: pluginapi.WebSocketHandler[]): void {
     this.router.get(
@@ -50,5 +54,4 @@ export function Router(): WebsocketRouter {
   return new WebsocketRouter()
 }
 
-// eslint-disable-next-line import/no-named-as-default-member -- the typings are not updated correctly
 export const wss = new Websocket.Server({ noServer: true })

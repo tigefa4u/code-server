@@ -1,24 +1,28 @@
-import * as bodyParser from "body-parser"
 import * as express from "express"
 import * as http from "http"
 import nodeFetch from "node-fetch"
 import { HttpCode } from "../../../src/common/http"
 import { proxy } from "../../../src/node/proxy"
-import { getAvailablePort } from "../../utils/helpers"
+import { wss, Router as WsRouter } from "../../../src/node/wsRouter"
+import { getAvailablePort, mockLogger } from "../../utils/helpers"
 import * as httpserver from "../../utils/httpserver"
 import * as integration from "../../utils/integration"
 
 describe("proxy", () => {
   const nhooyrDevServer = new httpserver.HttpServer()
+  const wsApp = express.default()
+  const wsRouter = WsRouter()
   let codeServer: httpserver.HttpServer | undefined
   let proxyPath: string
   let absProxyPath: string
   let e: express.Express
 
   beforeAll(async () => {
+    wsApp.use("/", wsRouter.router)
     await nhooyrDevServer.listen((req, res) => {
       e(req, res)
     })
+    nhooyrDevServer.listenUpgrade(wsApp)
     proxyPath = `/proxy/${nhooyrDevServer.port()}/wsup`
     absProxyPath = proxyPath.replace("/proxy/", "/absproxy/")
   })
@@ -29,6 +33,7 @@ describe("proxy", () => {
 
   beforeEach(() => {
     e = express.default()
+    mockLogger()
   })
 
   afterEach(async () => {
@@ -36,6 +41,18 @@ describe("proxy", () => {
       await codeServer.dispose()
       codeServer = undefined
     }
+    jest.clearAllMocks()
+  })
+
+  it("should return 403 Forbidden if proxy is disabled", async () => {
+    e.get("/wsup", (req, res) => {
+      res.json("you cannot see this")
+    })
+    codeServer = await integration.setup(["--auth=none", "--disable-proxy"], "")
+    const resp = await codeServer.fetch(proxyPath)
+    expect(resp.status).toBe(403)
+    const json = await resp.json()
+    expect(json).toEqual({ error: "Forbidden" })
   })
 
   it("should rewrite the base path", async () => {
@@ -92,7 +109,7 @@ describe("proxy", () => {
   })
 
   it("should allow post bodies", async () => {
-    e.use(bodyParser.json({ strict: false }))
+    e.use(express.json({ strict: false }))
     e.post("/wsup", (req, res) => {
       res.json(req.body)
     })
@@ -109,7 +126,7 @@ describe("proxy", () => {
   })
 
   it("should handle bad requests", async () => {
-    e.use(bodyParser.json({ strict: false }))
+    e.use(express.json({ strict: false }))
     e.post("/wsup", (req, res) => {
       res.json(req.body)
     })
@@ -136,7 +153,7 @@ describe("proxy", () => {
   })
 
   it("should handle errors", async () => {
-    e.use(bodyParser.json({ strict: false }))
+    e.use(express.json({ strict: false }))
     e.post("/wsup", (req, res) => {
       throw new Error("BROKEN")
     })
@@ -150,6 +167,106 @@ describe("proxy", () => {
     })
     expect(resp.status).toBe(500)
     expect(resp.statusText).toMatch("Internal Server Error")
+  })
+
+  it("should pass origin check", async () => {
+    wsRouter.ws("/wsup", async (req) => {
+      wss.handleUpgrade(req, req.ws, req.head, (ws) => {
+        ws.send("hello")
+        req.ws.resume()
+      })
+    })
+    codeServer = await integration.setup(["--auth=none"], "")
+    const ws = await codeServer.wsWait(proxyPath, {
+      headers: {
+        host: "localhost:8080",
+        origin: "https://localhost:8080",
+      },
+    })
+    ws.terminate()
+  })
+
+  it("should fail origin check", async () => {
+    await expect(async () => {
+      codeServer = await integration.setup(["--auth=none"], "")
+      await codeServer.wsWait(proxyPath, {
+        headers: {
+          host: "localhost:8080",
+          origin: "https://evil.org",
+        },
+      })
+    }).rejects.toThrow()
+  })
+
+  it("should proxy non-ASCII", async () => {
+    e.get(/.*/, (req, res) => {
+      res.json("ほげ")
+    })
+    codeServer = await integration.setup(["--auth=none"], "")
+    const resp = await codeServer.fetch(proxyPath.replace("wsup", "ほげ"))
+    expect(resp.status).toBe(200)
+    const json = await resp.json()
+    expect(json).toBe("ほげ")
+  })
+
+  it("should not double-encode query variables", async () => {
+    const spy = jest.fn()
+    e.get(/.*/, (req, res) => {
+      spy([req.originalUrl, req.query])
+      res.end()
+    })
+    codeServer = await integration.setup(["--auth=none"], "")
+    for (const test of [
+      {
+        endpoint: proxyPath,
+        query: { foo: "bar with spaces" },
+        expected: "/wsup?foo=bar+with+spaces",
+      },
+      {
+        endpoint: absProxyPath,
+        query: { foo: "bar with spaces" },
+        expected: absProxyPath + "?foo=bar+with+spaces",
+      },
+      {
+        endpoint: proxyPath,
+        query: { foo: "with-&-ampersand" },
+        expected: "/wsup?foo=with-%26-ampersand",
+      },
+      {
+        endpoint: absProxyPath,
+        query: { foo: "with-&-ampersand" },
+        expected: absProxyPath + "?foo=with-%26-ampersand",
+      },
+      {
+        endpoint: absProxyPath,
+        query: { foo: "ほげ ほげ" },
+        expected: absProxyPath + "?foo=%E3%81%BB%E3%81%92+%E3%81%BB%E3%81%92",
+      },
+      {
+        endpoint: proxyPath,
+        query: { foo: "ほげ ほげ" },
+        expected: "/wsup?foo=%E3%81%BB%E3%81%92+%E3%81%BB%E3%81%92",
+      },
+    ]) {
+      spy.mockClear()
+      const resp = await codeServer.fetch(test.endpoint, undefined, test.query)
+      expect(resp.status).toBe(200)
+      await resp.text()
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(spy).toHaveBeenCalledWith([test.expected, test.query])
+    }
+  })
+
+  it("should allow specifying an absproxy path", async () => {
+    const prefixedPath = `/codeserver/app1${absProxyPath}`
+    e.get(prefixedPath, (req, res) => {
+      res.send("app being served behind a prefixed path")
+    })
+    codeServer = await integration.setup(["--auth=none", "--abs-proxy-base-path=/codeserver/app1"], "")
+    const resp = await codeServer.fetch(absProxyPath)
+    expect(resp.status).toBe(200)
+    const text = await resp.text()
+    expect(text).toBe("app being served behind a prefixed path")
   })
 })
 
@@ -190,18 +307,18 @@ describe("proxy (standalone)", () => {
     })
 
     // Start both servers
-    await proxyTarget.listen(PROXY_PORT)
-    await testServer.listen(PORT)
+    proxyTarget.listen(PROXY_PORT)
+    testServer.listen(PORT)
   })
 
   afterEach(async () => {
-    await testServer.close()
-    await proxyTarget.close()
+    testServer.close()
+    proxyTarget.close()
   })
 
   it("should return a 500 when proxy target errors ", async () => {
     // Close the proxy target so that proxy errors
-    await proxyTarget.close()
+    proxyTarget.close()
     const errorResp = await nodeFetch(`${URL}/error`)
     expect(errorResp.status).toBe(HttpCode.ServerError)
     expect(errorResp.statusText).toBe("Internal Server Error")

@@ -4,6 +4,7 @@ import * as path from "path"
 import { generateUuid } from "../../../src/common/util"
 import { tmpdir } from "../../../src/node/constants"
 import * as util from "../../../src/node/util"
+import { clean, tmpdir as tempDirHelper } from "../../utils/helpers"
 
 describe("getEnvPaths", () => {
   describe("on darwin", () => {
@@ -104,6 +105,10 @@ describe("hash", () => {
     const hashed = await util.hash(plainTextPassword)
     expect(hashed).not.toBe(plainTextPassword)
   })
+  it("should return a hash for an empty string", async () => {
+    const hashed = await util.hash("")
+    expect(hashed).not.toBe("")
+  })
 })
 
 describe("isHashMatch", () => {
@@ -137,16 +142,16 @@ describe("isHashMatch", () => {
     const actual = await util.isHashMatch(password, _hash)
     expect(actual).toBe(false)
   })
-  it("should return false if the hash doesn't start with a $", async () => {
+  it("should return false and not throw an error if the hash doesn't start with a $", async () => {
     const password = "hellowpasssword"
     const _hash = "n2i$v=19$m=4096,t=3,p=1$EAoczTxVki21JDfIZpTUxg$rkXgyrW4RDGoDYrxBFD4H2DlSMEhP4h+Api1hXnGnFY"
+    expect(async () => await util.isHashMatch(password, _hash)).not.toThrow()
     expect(await util.isHashMatch(password, _hash)).toBe(false)
   })
-  it("should return false if the password and hash don't match", async () => {
+  it("should reject the promise and throw if error", async () => {
     const password = "hellowpasssword"
     const _hash = "$ar2i"
-    const actual = await util.isHashMatch(password, _hash)
-    expect(actual).toBe(false)
+    expect(async () => await util.isHashMatch(password, _hash)).rejects.toThrow()
   })
 })
 
@@ -345,6 +350,22 @@ describe("isCookieValid", () => {
     })
     expect(isValid).toBe(false)
   })
+  it("should return false and empty string as hashedPassword when passwordMethod is invalid", async () => {
+    const p = "password1"
+    const passwordValidation = await util.handlePasswordValidation({
+      // @ts-expect-error although this shouldn't ever happen, it ensures the default case in this function
+      // works as expected.
+      passwordMethod: "INVALID",
+      passwordFromRequestBody: p,
+      passwordFromArgs: undefined,
+      hashedPasswordFromArgs: undefined,
+    })
+
+    const matchesHash = await util.isHashMatch(p, passwordValidation.hashedPassword)
+
+    expect(passwordValidation.isPasswordValid).toBe(false)
+    expect(matchesHash).toBe(false)
+  })
 })
 
 describe("sanitizeString", () => {
@@ -436,26 +457,169 @@ describe("isFile", () => {
   afterEach(async () => {
     await fs.rm(testDir, { recursive: true, force: true })
   })
-  it("should return false if the path doesn't exist", async () => {
+  it("should return false if is directory", async () => {
     expect(await util.isFile(testDir)).toBe(false)
   })
   it("should return true if is file", async () => {
     expect(await util.isFile(pathToFile)).toBe(true)
   })
+  it("should return false if the path doesn't exist", async () => {
+    expect(await util.isFile("fakefile.txt")).toBe(false)
+  })
 })
 
-describe("humanPath", () => {
-  it("should return an empty string if no path provided", () => {
-    const mockHomedir = "/home/coder"
-    const actual = util.humanPath(mockHomedir)
-    const expected = ""
-    expect(actual).toBe(expected)
+describe("isDirectory", () => {
+  const testDir = path.join(tmpdir, "tests", "isDirectory")
+  let pathToFile = ""
+
+  beforeEach(async () => {
+    pathToFile = path.join(testDir, "foo.txt")
+    await fs.mkdir(testDir, { recursive: true })
+    await fs.writeFile(pathToFile, "hello")
   })
-  it("should replace the homedir with ~", () => {
-    const mockHomedir = "/home/coder"
-    const path = `${mockHomedir}/code-server`
-    const actual = util.humanPath(mockHomedir, path)
-    const expected = "~/code-server"
-    expect(actual).toBe(expected)
+  afterEach(async () => {
+    await fs.rm(testDir, { recursive: true, force: true })
+  })
+  it("should return false if is a file", async () => {
+    expect(await util.isDirectory(pathToFile)).toBe(false)
+  })
+  it("should return true if is directory", async () => {
+    expect(await util.isDirectory(testDir)).toBe(true)
+  })
+  it("should return false if the path doesn't exist", async () => {
+    expect(await util.isDirectory("fakefile.txt")).toBe(false)
+  })
+})
+
+describe("isWsl", () => {
+  const testName = "wsl"
+
+  beforeAll(async () => {
+    await clean(testName)
+  })
+
+  describe("on Linux (microsoft)", () => {
+    it("should return true", async () => {
+      const fileName = "proc-version"
+      const osRelease = "5.4.0-1066-gke"
+      const pathToFile = path.join(await tempDirHelper(testName), fileName)
+      await fs.writeFile(
+        pathToFile,
+        "Linux version 3.4.0-Microsoft (Microsoft@Microsoft.com) (gcc version 4.7 (GCC) ) #1 SMP PREEMPT Wed Dec 31 14:42:53 PST 2014",
+      )
+      expect(await util.isWsl("linux", osRelease, pathToFile)).toBe(true)
+    })
+  })
+  describe("on Linux (non-microsoft)", () => {
+    it("should return false", async () => {
+      const fileName = "proc-version2"
+      const osRelease = "Linux"
+      const pathToFile = path.join(await tempDirHelper(testName), fileName)
+      await fs.writeFile(
+        pathToFile,
+        "Linux version 5.4.0-1066-gke (buildd@lcy02-amd64-039) (gcc version 9.4.0 (Ubuntu 9.4.0-1ubuntu1~20.04)) #69-Ubuntu SMP Fri Mar 11 13:52:45 UTC 202",
+      )
+      expect(await util.isWsl("linux", osRelease, pathToFile)).toBe(false)
+    })
+  })
+  describe("on Win32 with microsoft in /proc/version", () => {
+    it("should return false", async () => {
+      const fileName = "proc-version3"
+      const osRelease = "3.4.0-Microsoft"
+      const pathToFile = path.join(await tempDirHelper(testName), fileName)
+      await fs.writeFile(
+        pathToFile,
+        "Linux version 3.4.0-Microsoft (Microsoft@Microsoft.com) (gcc version 4.7 (GCC) ) #1 SMP PREEMPT Wed Dec 31 14:42:53 PST 2014",
+      )
+      expect(await util.isWsl("win32", osRelease, pathToFile)).toBe(false)
+    })
+  })
+  describe("on Darwin", () => {
+    it("should return false", async () => {
+      const fileName = "proc-version4"
+      const osRelease =
+        "Darwin Roadrunner.local 10.3.0 Darwin Kernel Version 10.3.0: Fri Feb 26 11:58:09 PST 2010; root:xnu-1504.3.12~1/RELEASE_I386 i386"
+      const pathToFile = path.join(await tempDirHelper(testName), fileName)
+      expect(await util.isWsl("darwin", osRelease, pathToFile)).toBe(false)
+    })
+  })
+})
+
+describe("open", () => {
+  it("should throw an error if address is a string", async () => {
+    const address = "localhost:3000"
+    await expect(util.open(address)).rejects.toThrow("Cannot open socket paths")
+  })
+})
+describe("constructOpenOptions", () => {
+  it("should return options for darwin", () => {
+    const platform: NodeJS.Platform | "wsl" = "darwin"
+    const url = new URL("localhost:8080")
+    const { args, command, urlSearch } = util.constructOpenOptions(platform, url.search)
+    expect(args).toStrictEqual([])
+    expect(command).toBe("open")
+    expect(urlSearch).toBe("")
+  })
+  it("should return options for linux", () => {
+    const platform: NodeJS.Platform | "wsl" = "linux"
+    const url = new URL("localhost:8080")
+    const { args, command, urlSearch } = util.constructOpenOptions(platform, url.search)
+    expect(args).toStrictEqual([])
+    expect(command).toBe("xdg-open")
+    expect(urlSearch).toBe("")
+  })
+  it("should return options for win32", () => {
+    const platform: NodeJS.Platform | "wsl" = "win32"
+    const url = new URL("localhost:8080?q=&test")
+    const { args, command, urlSearch } = util.constructOpenOptions(platform, url.search)
+    expect(args).toStrictEqual(["/c", "start", '""', "/b"])
+    expect(command).toBe("cmd")
+    expect(urlSearch).toBe("?q=^&test")
+  })
+  it("should return options for wsl", () => {
+    const platform: NodeJS.Platform | "wsl" = "wsl"
+    const url = new URL("localhost:8080?q=&test")
+    const { args, command, urlSearch } = util.constructOpenOptions(platform, url.search)
+    expect(args).toStrictEqual(["/c", "start", '""', "/b"])
+    expect(command).toBe("cmd.exe")
+    expect(urlSearch).toBe("?q=^&test")
+  })
+})
+
+describe("splitOnFirstEquals", () => {
+  const tests = [
+    {
+      name: "empty",
+      key: "",
+      value: "",
+    },
+    {
+      name: "split on first equals",
+      key: "foo",
+      value: "bar",
+    },
+    {
+      name: "split on first equals even with multiple equals",
+      key: "foo",
+      value: "bar=baz",
+    },
+    {
+      name: "split with empty value",
+      key: "foo",
+      value: "",
+    },
+    {
+      name: "split with no value",
+      key: "foo",
+      value: undefined,
+    },
+  ]
+  tests.forEach((test) => {
+    it("should ${test.name}", () => {
+      const input = test.key && typeof test.value !== "undefined" ? `${test.key}=${test.value}` : test.key
+      const [key, value] = util.splitOnFirstEquals(input)
+      expect(key).toStrictEqual(test.key)
+      expect(value).toStrictEqual(test.value || undefined)
+    })
   })
 })

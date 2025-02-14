@@ -1,64 +1,77 @@
+<!-- prettier-ignore-start -->
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 # Termux
 
 - [Install](#install)
+- [NPM Installation](#npm-installation)
 - [Upgrade](#upgrade)
 - [Known Issues](#known-issues)
   - [Git won't work in `/sdcard`](#git-wont-work-in-sdcard)
+  - [Many extensions including language packs fail to install](#many-extensions-including-language-packs-fail-to-install)
 - [Extra](#extra)
+  - [Keyboard Shortcuts and Tab Key](#keyboard-shortcuts-and-tab-key)
   - [Create a new user](#create-a-new-user)
   - [Install Go](#install-go)
   - [Install Python](#install-python)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
+<!-- prettier-ignore-end -->
 
 ## Install
 
 1. Get [Termux](https://f-droid.org/en/packages/com.termux/) from **F-Droid**.
-2. Install Debian by running the following.
-   - Run `termux-setup-storage` to allow storage access, or else code-server won't be able to read from `/sdcard`.\
-      If you used the Andronix command then you may have to edit the `start-debian.sh` script to mount `/sdcard` just as simple as uncommenting the `command+=" -b /sdcard"` line.
-     > The following command was extracted from [Andronix](https://andronix.app/) you can also use [proot-distro](https://github.com/termux/proot-distro).
-     > After Debian is installed the `~ $` will change to `root@localhost`.
+2. Run `pkg install tur-repo`
+3. Run `pkg install code-server`
+4. You can now start code server by simply running `code-server`.
 
-```bash
-pkg update -y && pkg install wget curl proot tar -y && wget https://raw.githubusercontent.com/AndronixApp/AndronixOrigin/master/Installer/Debian/debian.sh -O debian.sh && chmod +x debian.sh && bash debian.sh
+## NPM Installation
+
+1. Get [Termux](https://f-droid.org/en/packages/com.termux/) from **F-Droid**.
+
+2. We will now change using the following command.
+
+```sh
+termux-change-repo
 ```
 
-3. Run the following commands to setup Debian.
+Now select `Main Repository` then change repo to `Mirrors by Grimler Hosted on grimler.se`.
 
-```bash
-apt update
-apt upgrade -y
-apt-get install nano vim sudo curl wget git -y
+3. After successfully updating of repository update and upgrade all the packages by the following command
+
+```sh
+pkg update
+pkg upgrade -y
 ```
 
-4. Install [NVM](https://github.com/nvm-sh/nvm) by following the install guide in the README, just a curl/wget command.
-5. Set up NVM for multi-user. After installing NVM it automatically adds the necessary commands for it to work, but it will only work if you are logged in as root;
+4. Now let's install requirement dependancy.
 
-   - Copy the lines NVM asks you to run after running the install script.
-   - Run `nano /root/.bashrc` and comment out those lines by adding a `#` at the start.
-   - Run `nano /etc/profile` and paste those lines at the end and make sure to replace `$HOME` with `/root`
-   - Now run `exit` and start Debain again.
-
-6. After following the instructions and setting up NVM you can now install the [required node version](https://coder.com/docs/code-server/latest/npm#nodejs-version) using `nvm install version_here`.
-7. To install `code-server` run the following.
-   > To check the install process (Will not actually install code-server)
-   > If it all looks good, you can install code-server by running the second command
-
-```bash
-curl -fsSL https://code-server.dev/install.sh | sh -s -- --dry-run
+```sh
+pkg install -y \
+  build-essential \
+  binutils \
+  pkg-config \
+  python3 \
+  nodejs-lts
+npm config set python python3
+node -v
 ```
 
-```bash
-curl -fsSL https://code-server.dev/install.sh | sh
+you will get Node version `v20`
+
+5. Now install code-server following our guide on [installing with npm](./npm.md)
+
+6. Congratulation code-server is installed on your device using the following command.
+
+```sh
+code-server --auth none
 ```
 
-8. You can now start code server by simply running `code-server`.
+7. If already installed then use the following command for upgradation.
 
-> Consider using a new user instead of root, read [here](https://www.howtogeek.com/124950/htg-explains-why-you-shouldnt-log-into-your-linux-system-as-root/) why using root is not recommended.\
-> Learn how to add a user [here](#create-a-new-user).
+```
+npm update --global code-server
+```
 
 ## Upgrade
 
@@ -76,17 +89,59 @@ Potential Workaround :
 1. Create a soft-link from the debian-fs to your folder in `/sdcard`
 2. Use git from termux (preferred)
 
+### Many extensions including language packs fail to install
+
+Issue: Android is not seen as a Linux environment but as a separate, unsupported platform, so code-server only allows [Web Extensions](https://code.visualstudio.com/api/extension-guides/web-extensions), refusing to download extensions that run on the server.\
+Fix: None\
+Potential workarounds :
+
+Either
+
+- Manually download extensions as `.vsix` file and install them via `Extensions: Install from VSIX...` in the Command Palette.
+
+- Use an override to pretend the platform is Linux:
+
+Create a JS script that patches `process.platform`:
+
+```js
+// android-as-linux.js
+Object.defineProperty(process, "platform", {
+  get() {
+    return "linux"
+  },
+})
+```
+
+Then use Node's `--require` option to make sure it is loaded before `code-server` starts:
+
+```sh
+NODE_OPTIONS="--require /path/to/android-as-linux.js" code-server
+```
+
+⚠️ Note that Android and Linux are not 100% compatible, so use these workarounds at your own risk. Extensions that have native dependencies other than Node or that directly interact with the OS might cause issues.
+
 ## Extra
+
+### Keyboard Shortcuts and Tab Key
+
+In order to support the tab key and use keyboard shortcuts, add this to your
+settings.json:
+
+```json
+{
+  "keyboard.dispatch": "keyCode"
+}
+```
 
 ### Create a new user
 
 To create a new user follow these simple steps -
 
-1. Create a new user by running `useradd username -m`.
-2. Change the password by running `passwd username`.
-3. Give your new user sudo access by runnning `visudo`, scroll down to `User privilege specification` and add the following line after root `username ALL=(ALL:ALL) ALL`.
-4. Now edit the `/etc/passwd` file with your commadline editor of choice and at the end of the line that specifies your user change `/bin/sh` to `/bin/bash`.
-5. Now switch users, by running `su - username`
+1. Create a new user by running `useradd <username> -m`.
+2. Change the password by running `passwd <username>`.
+3. Give your new user sudo access by running `visudo`, scroll down to `User privilege specification` and add the following line after root `username ALL=(ALL:ALL) ALL`.
+4. Now edit the `/etc/passwd` file with your command line editor of choice and at the end of the line that specifies your user change `/bin/sh` to `/bin/bash`.
+5. Now switch users by running `su - <username>`
 
 - Remember the `-` betweeen `su` and username is required to execute `/etc/profile`,\
   since `/etc/profile` may have some necessary things to be executed you should always add a `-`.
@@ -95,7 +150,7 @@ To create a new user follow these simple steps -
 
 > From https://golang.org/doc/install
 
-1. Go to https://golang.org/dl/ and copy the download link for `linux arm` and run the following.
+1. Go to https://golang.org/dl/ and copy the download link for `linux arm` and run the following:
 
 ```bash
 wget download_link
@@ -115,7 +170,7 @@ rm -rf /usr/local/go && tar -C /usr/local -xzf archive_name
 
 > Run these commands as root
 
-1. Run the following command to install required packages to build python.
+1. Run the following commands to install required packages to build python:
 
 ```bash
 sudo apt-get update
@@ -124,13 +179,13 @@ sudo apt-get install make build-essential libssl-dev zlib1g-dev \
   libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
 ```
 
-2. Install [pyenv](https://github.com/pyenv/pyenv/) from [pyenv-installer](https://github.com/pyenv/pyenv-installer) by running.
+2. Install [pyenv](https://github.com/pyenv/pyenv/) from [pyenv-installer](https://github.com/pyenv/pyenv-installer) by running:
 
 ```bash
 curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash
 ```
 
-3. Run `nano /etc/profile` and add the following
+3. Run `nano /etc/profile` and add the following:
 
 ```bash
 export PYENV_ROOT="/root/.pyenv"
@@ -139,7 +194,7 @@ eval "$(pyenv init --path)"
 eval "$(pyenv virtualenv-init -)"
 ```
 
-4. Exit start Debian again.
+4. Exit and start Debian again.
 5. Run `pyenv versions` to list all installable versions.
 6. Run `pyenv install version` to install the desired python version.
    > The build process may take some time (an hour or 2 depending on your device).

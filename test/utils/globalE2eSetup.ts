@@ -1,8 +1,7 @@
-import { Cookie } from "playwright"
-import { CookieKeys } from "../../src/common/http"
-import { hash } from "../../src/node/util"
-import { PASSWORD, workspaceDir } from "./constants"
-import { clean } from "./helpers"
+import { promises as fs } from "fs"
+import * as path from "path"
+import { workspaceDir } from "./constants"
+import { clean, tmpdir } from "./helpers"
 import * as wtfnode from "./wtfnode"
 
 /**
@@ -20,25 +19,14 @@ export default async function () {
     wtfnode.setup()
   }
 
-  // TODO: Replace this with a call to code-server to get the cookie. To avoid
-  // too much overhead we can do an http POST request and avoid spawning a
-  // browser for it.
-  const cookies: Cookie[] = [
-    {
-      domain: "localhost",
-      expires: -1,
-      httpOnly: false,
-      name: CookieKeys.Session,
-      path: "/",
-      sameSite: "Lax",
-      secure: false,
-      value: await hash(PASSWORD),
-    },
-  ]
+  // Create dummy code-workspace for routes.test.ts
+  const codeWorkspace = path.join(await tmpdir(workspaceDir), "test.code-workspace")
+  await fs.writeFile(codeWorkspace, "")
+  process.env.CODE_WORKSPACE_DIR = codeWorkspace
 
-  // Save storage state and store as an env variable
-  // More info: https://playwright.dev/docs/auth/#reuse-authentication-state
-  process.env.STORAGE = JSON.stringify({ cookies })
+  // Create dummy folder for routes.test.ts
+  const folder = await tmpdir(workspaceDir)
+  process.env.CODE_FOLDER_DIR = folder
 
   console.log("✅ Global Setup for Playwright End-to-End Tests is now complete.")
 }

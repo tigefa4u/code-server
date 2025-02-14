@@ -12,7 +12,15 @@ import { version as codeServerVersion } from "./constants"
 import { Heart } from "./heart"
 import { CoderSettings, SettingsProvider } from "./settings"
 import { UpdateProvider } from "./update"
-import { getPasswordMethod, IsCookieValidArgs, isCookieValid, sanitizeString, escapeHtml, escapeJSON } from "./util"
+import {
+  getPasswordMethod,
+  IsCookieValidArgs,
+  isCookieValid,
+  sanitizeString,
+  escapeHtml,
+  escapeJSON,
+  splitOnFirstEquals,
+} from "./util"
 
 /**
  * Base options included on every page.
@@ -65,6 +73,25 @@ export const replaceTemplates = <T extends object>(
     .replace(/{{BASE}}/g, serverOptions.base)
     .replace(/{{CS_STATIC_BASE}}/g, serverOptions.csStaticBase)
     .replace("{{OPTIONS}}", () => escapeJSON(serverOptions))
+}
+
+/**
+ * Throw an error if proxy is not enabled. Call `next` if provided.
+ */
+export const ensureProxyEnabled = (req: express.Request, _?: express.Response, next?: express.NextFunction): void => {
+  if (!proxyEnabled(req)) {
+    throw new HttpError("Forbidden", HttpCode.Forbidden)
+  }
+  if (next) {
+    next()
+  }
+}
+
+/**
+ * Return true if proxy is enabled.
+ */
+export const proxyEnabled = (req: express.Request): boolean => {
+  return !req.args["disable-proxy"]
 }
 
 /**
@@ -139,6 +166,21 @@ export const relativeRoot = (originalUrl: string): string => {
 }
 
 /**
+ * A helper function to construct a redirect path based on
+ * an Express Request, query and a path to redirect to.
+ *
+ * Redirect path is relative to `/${to}`.
+ */
+export const constructRedirectPath = (req: express.Request, query: qs.ParsedQs, to: string): string => {
+  const relativePath = normalize(`${relativeRoot(req.originalUrl)}/${to}`, true)
+  // %2f or %2F are both equalivent to an encoded slash /
+  const queryString = qs.stringify(query).replace(/%2[fF]/g, "/")
+  const redirectPath = `${relativePath}${queryString ? `?${queryString}` : ""}`
+
+  return redirectPath
+}
+
+/**
  * Redirect relatively to `/${to}`. Query variables on the current URI will be
  * preserved.  `to` should be a simple path without any query parameters
  * `override` will merge with the existing query (use `undefined` to unset).
@@ -156,9 +198,7 @@ export const redirect = (
     }
   })
 
-  const relativePath = normalize(`${relativeRoot(req.originalUrl)}/${to}`, true)
-  const queryString = qs.stringify(query)
-  const redirectPath = `${relativePath}${queryString ? `?${queryString}` : ""}`
+  const redirectPath = constructRedirectPath(req, query, to)
   logger.debug(`redirecting from ${req.originalUrl} to ${redirectPath}`)
   res.redirect(redirectPath)
 }
@@ -196,7 +236,7 @@ export const getCookieDomain = (host: string, proxyDomains: string[]): string | 
     // default NGINX does this).
     !host.includes(".")
   ) {
-    logger.debug("no valid cookie doman", field("host", host))
+    logger.debug("no valid cookie domain", field("host", host))
     return undefined
   }
 
@@ -206,7 +246,7 @@ export const getCookieDomain = (host: string, proxyDomains: string[]): string | 
     }
   })
 
-  logger.debug("got cookie doman", field("host", host))
+  logger.debug("got cookie domain", field("host", host))
   return host || undefined
 }
 
@@ -279,8 +319,8 @@ export const getCookieOptions = (req: express.Request): express.CookieOptions =>
   // URL of that page) and the relative path to the root as given to it by the
   // backend.  Using these two we can determine the true absolute root.
   const url = new URL(
-    req.query.base || req.body.base || "/",
-    req.query.href || req.body.href || "http://" + (req.headers.host || "localhost"),
+    req.query.base || req.body?.base || "/",
+    req.query.href || req.body?.href || "http://" + (req.headers.host || "localhost"),
   )
   return {
     domain: getCookieDomain(url.host, req.args["proxy-domain"]),
@@ -294,4 +334,92 @@ export const getCookieOptions = (req: express.Request): express.CookieOptions =>
  */
 export const self = (req: express.Request): string => {
   return normalize(`${req.baseUrl}${req.originalUrl.endsWith("/") ? "/" : ""}`, true)
+}
+
+function getFirstHeader(req: http.IncomingMessage, headerName: string): string | undefined {
+  const val = req.headers[headerName]
+  return Array.isArray(val) ? val[0] : val
+}
+
+/**
+ * Throw a forbidden error if origin checks fail. Call `next` if provided.
+ */
+export function ensureOrigin(req: express.Request, _?: express.Response, next?: express.NextFunction): void {
+  try {
+    authenticateOrigin(req)
+    if (next) {
+      next()
+    }
+  } catch (error) {
+    logger.debug(`${error instanceof Error ? error.message : error}; blocking request to ${req.originalUrl}`)
+    throw new HttpError("Forbidden", HttpCode.Forbidden)
+  }
+}
+
+/**
+ * Authenticate the request origin against the host.  Throw if invalid.
+ */
+export function authenticateOrigin(req: express.Request): void {
+  // A missing origin probably means the source is non-browser.  Not sure we
+  // have a use case for this but let it through.
+  const originRaw = getFirstHeader(req, "origin")
+  if (!originRaw) {
+    return
+  }
+
+  let origin: string
+  try {
+    origin = new URL(originRaw).host.trim().toLowerCase()
+  } catch (error) {
+    throw new Error(`unable to parse malformed origin "${originRaw}"`)
+  }
+
+  const trustedOrigins = req.args["trusted-origins"] || []
+  if (trustedOrigins.includes(origin) || trustedOrigins.includes("*")) {
+    return
+  }
+
+  const host = getHost(req)
+  if (typeof host === "undefined") {
+    // A missing host likely means the reverse proxy has not been configured to
+    // forward the host which means we cannot perform the check.  Emit an error
+    // so an admin can fix the issue.
+    logger.error("No host headers found")
+    logger.error("Are you behind a reverse proxy that does not forward the host?")
+    throw new Error("no host headers found")
+  }
+
+  if (host !== origin) {
+    throw new Error(`host "${host}" does not match origin "${origin}"`)
+  }
+}
+
+/**
+ * Get the host from headers.  It will be trimmed and lowercased.
+ */
+export function getHost(req: express.Request): string | undefined {
+  // Honor Forwarded if present.
+  const forwardedRaw = getFirstHeader(req, "forwarded")
+  if (forwardedRaw) {
+    const parts = forwardedRaw.split(/[;,]/)
+    for (let i = 0; i < parts.length; ++i) {
+      const [key, value] = splitOnFirstEquals(parts[i])
+      if (key.trim().toLowerCase() === "host" && value) {
+        return value.trim().toLowerCase()
+      }
+    }
+  }
+
+  // Honor X-Forwarded-Host if present.  Some reverse proxies will set multiple
+  // comma-separated hosts.
+  const xHost = getFirstHeader(req, "x-forwarded-host")
+  if (xHost) {
+    const firstXHost = xHost.split(",")[0]
+    if (firstXHost) {
+      return firstXHost.trim().toLowerCase()
+    }
+  }
+
+  const host = getFirstHeader(req, "host")
+  return host ? host.trim().toLowerCase() : undefined
 }

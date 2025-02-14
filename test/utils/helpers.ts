@@ -3,6 +3,8 @@ import { promises as fs } from "fs"
 import * as net from "net"
 import * as os from "os"
 import * as path from "path"
+import { CodeServer, CodeServerPage } from "../e2e/models/CodeServer"
+import { REVERSE_PROXY_PORT, REVERSE_PROXY_BASE_PATH } from "./constants"
 
 /**
  * Spy on the logger and console and replace with mock implementations to
@@ -29,7 +31,7 @@ export function mockLogger() {
  */
 export async function clean(testName: string): Promise<void> {
   const dir = path.join(os.tmpdir(), `code-server/tests/${testName}`)
-  await fs.rmdir(dir, { recursive: true })
+  await fs.rm(dir, { force: true, recursive: true })
 }
 
 /**
@@ -104,4 +106,82 @@ export function idleTimer(message: string, reject: (error: Error) => void, delay
       clearTimeout(timeout)
     },
   }
+}
+
+/**
+ * If using a proxy, return the address of the proxy.
+ *
+ * Otherwise, return the direct address of code-server.
+ */
+export async function getMaybeProxiedCodeServer(codeServer: CodeServerPage | CodeServer): Promise<string> {
+  const address = await codeServer.address()
+  if (process.env.USE_PROXY === "1") {
+    const uri = new URL(address)
+    return `http://${uri.hostname}:${REVERSE_PROXY_PORT}/${uri.port}/${REVERSE_PROXY_BASE_PATH}/`
+  }
+
+  return address
+}
+
+/**
+ * Stripes proxy base from url.pathname
+ * i.e. /<port>/ide + route returns just route
+ */
+export function getMaybeProxiedPathname(url: URL): string {
+  if (process.env.USE_PROXY === "1") {
+    // Behind proxy, path will be /<port>/ide + route
+    const pathWithoutProxy = url.pathname.split(`/${REVERSE_PROXY_BASE_PATH}`)[1]
+    return pathWithoutProxy
+  }
+
+  return url.pathname
+}
+
+interface FakeVscodeSockets {
+  /* If called, closes all servers after the first connection. */
+  once(): FakeVscodeSockets
+
+  /* Manually close all servers. */
+  close(): Promise<void>
+}
+
+/**
+ * Creates servers for each socketPath specified.
+ */
+export function listenOn(...socketPaths: string[]): FakeVscodeSockets {
+  let once = false
+  const servers = socketPaths.map((socketPath) => {
+    const server = net.createServer(() => {
+      if (once) {
+        close()
+      }
+    })
+    server.listen(socketPath)
+    return server
+  })
+
+  async function close() {
+    await Promise.all(
+      servers.map(
+        (server) =>
+          new Promise<void>((resolve, reject) => {
+            server.close((err) => {
+              if (err) {
+                reject(err)
+                return
+              }
+              resolve()
+            })
+          }),
+      ),
+    )
+  }
+  const fakeVscodeSockets = {
+    close,
+    once: () => {
+      once = true
+      return fakeVscodeSockets
+    },
+  }
+  return fakeVscodeSockets
 }

@@ -9,9 +9,11 @@ import * as util from "../common/util"
 import { DefaultedArgs } from "./cli"
 import { disposer } from "./http"
 import { isNodeJSErrnoException } from "./util"
+import { EditorSessionManager, makeEditorSessionManagerServer } from "./vscodeSocket"
 import { handleUpgrade } from "./wsRouter"
 
-type ListenOptions = Pick<DefaultedArgs, "socket" | "port" | "host">
+type SocketOptions = { socket: string; "socket-mode"?: string }
+type ListenOptions = DefaultedArgs | SocketOptions
 
 export interface App extends Disposable {
   /** Handles regular HTTP requests. */
@@ -20,33 +22,45 @@ export interface App extends Disposable {
   wsRouter: Express
   /** The underlying HTTP server. */
   server: http.Server
+  /** Handles requests to the editor session management API. */
+  editorSessionManagerServer: http.Server
 }
 
-const listen = (server: http.Server, { host, port, socket }: ListenOptions) => {
-  return new Promise<void>(async (resolve, reject) => {
-    server.on("error", reject)
+const isSocketOpts = (opts: ListenOptions): opts is SocketOptions => {
+  return !!(opts as SocketOptions).socket || !(opts as DefaultedArgs).host
+}
 
+export const listen = async (server: http.Server, opts: ListenOptions) => {
+  if (isSocketOpts(opts)) {
+    try {
+      await fs.unlink(opts.socket)
+    } catch (error: any) {
+      handleArgsSocketCatchError(error)
+    }
+  }
+  await new Promise<void>(async (resolve, reject) => {
+    server.on("error", reject)
     const onListen = () => {
       // Promise resolved earlier so this is an unrelated error.
       server.off("error", reject)
       server.on("error", (err) => util.logError(logger, "http server error", err))
-
       resolve()
     }
-
-    if (socket) {
-      try {
-        await fs.unlink(socket)
-      } catch (error: any) {
-        handleArgsSocketCatchError(error)
-      }
-
-      server.listen(socket, onListen)
+    if (isSocketOpts(opts)) {
+      server.listen(opts.socket, onListen)
     } else {
       // [] is the correct format when using :: but Node errors with them.
-      server.listen(port, host.replace(/^\[|\]$/g, ""), onListen)
+      server.listen(opts.port, opts.host.replace(/^\[|\]$/g, ""), onListen)
     }
   })
+
+  // NOTE@jsjoeio: we need to chmod after the server is finished
+  // listening. Otherwise, the socket may not have been created yet.
+  if (isSocketOpts(opts)) {
+    if (opts["socket-mode"]) {
+      await fs.chmod(opts.socket, opts["socket-mode"])
+    }
+  }
 }
 
 /**
@@ -66,14 +80,22 @@ export const createApp = async (args: DefaultedArgs): Promise<App> => {
       )
     : http.createServer(router)
 
-  const dispose = disposer(server)
+  const disposeServer = disposer(server)
 
   await listen(server, args)
 
   const wsRouter = express()
   handleUpgrade(wsRouter, server)
 
-  return { router, wsRouter, server, dispose }
+  const editorSessionManager = new EditorSessionManager()
+  const editorSessionManagerServer = await makeEditorSessionManagerServer(args["session-socket"], editorSessionManager)
+  const disposeEditorSessionManagerServer = disposer(editorSessionManagerServer)
+
+  const dispose = async () => {
+    await Promise.all([disposeServer(), disposeEditorSessionManagerServer()])
+  }
+
+  return { router, wsRouter, server, dispose, editorSessionManagerServer }
 }
 
 /**
@@ -90,34 +112,12 @@ export const ensureAddress = (server: http.Server, protocol: string): URL | stri
   }
 
   if (typeof addr !== "string") {
-    return new URL(`${protocol}://${addr.address}:${addr.port}`)
+    const host = addr.family === "IPv6" ? `[${addr.address}]` : addr.address
+    return new URL(`${protocol}://${host}:${addr.port}`)
   }
 
   // If this is a string then it is a pipe or Unix socket.
   return addr
-}
-
-/**
- * Handles error events from the server.
- *
- * If the outlying Promise didn't resolve
- * then we reject with the error.
- *
- * Otherwise, we log the error.
- *
- * We extracted into a function so that we could
- * test this logic more easily.
- */
-export const handleServerError = (resolved: boolean, err: Error, reject: (err: Error) => void) => {
-  // Promise didn't resolve earlier so this means it's an error
-  // that occurs before the server can successfully listen.
-  // Possibly triggered by listening on an invalid port or socket.
-  if (!resolved) {
-    reject(err)
-  } else {
-    // Promise resolved earlier so this is an unrelated error.
-    util.logError(logger, "http server error", err)
-  }
 }
 
 /**
@@ -129,6 +129,6 @@ export const handleServerError = (resolved: boolean, err: Error, reject: (err: E
  */
 export const handleArgsSocketCatchError = (error: any) => {
   if (!isNodeJSErrnoException(error) || error.code !== "ENOENT") {
-    logger.error(error.message ? error.message : error)
+    throw Error(error.message ? error.message : error)
   }
 }

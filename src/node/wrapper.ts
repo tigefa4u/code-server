@@ -3,7 +3,7 @@ import * as cp from "child_process"
 import * as path from "path"
 import * as rfs from "rotating-file-stream"
 import { Emitter } from "../common/emitter"
-import { DefaultedArgs } from "./cli"
+import { DefaultedArgs, redactArgs } from "./cli"
 import { paths } from "./util"
 
 const timeoutInterval = 10000 // 10s, matches VS Code's timeouts.
@@ -44,10 +44,11 @@ export function onMessage<M, T extends M>(
     }
 
     const onMessage = (message: M) => {
-      ;(customLogger || logger).trace("got message", field("message", message))
       if (fn(message)) {
         cleanup()
         resolve(message)
+      } else {
+        ;(customLogger || logger).debug("got unhandled message", field("message", message))
       }
     }
 
@@ -77,7 +78,10 @@ type ChildMessage = RelaunchMessage | ChildHandshakeMessage
 type ParentMessage = ParentHandshakeMessage
 
 class ProcessError extends Error {
-  public constructor(message: string, public readonly code: number | undefined) {
+  public constructor(
+    message: string,
+    public readonly code: number | undefined,
+  ) {
     super(message)
     this.name = this.constructor.name
     Error.captureStackTrace(this, this.constructor)
@@ -147,7 +151,7 @@ abstract class Process {
  * Child process that will clean up after itself if the parent goes away and can
  * perform a handshake with the parent and ask it to relaunch.
  */
-class ChildProcess extends Process {
+export class ChildProcess extends Process {
   public logger = logger.named(`child:${process.pid}`)
 
   public constructor(private readonly parentPid: number) {
@@ -172,6 +176,7 @@ class ChildProcess extends Process {
    * Initiate the handshake and wait for a response from the parent.
    */
   public async handshake(): Promise<DefaultedArgs> {
+    this.logger.debug("initiating handshake")
     this.send({ type: "handshake" })
     const message = await onMessage<ParentMessage, ParentHandshakeMessage>(
       process,
@@ -179,6 +184,13 @@ class ChildProcess extends Process {
         return message.type === "handshake"
       },
       this.logger,
+    )
+    this.logger.debug(
+      "got message",
+      field("message", {
+        type: message.type,
+        args: redactArgs(message.args),
+      }),
     )
     return message.args
   }
@@ -203,8 +215,9 @@ class ChildProcess extends Process {
 
 /**
  * Parent process wrapper that spawns the child process and performs a handshake
- * with it. Will relaunch the child if it receives a SIGUSR1 or is asked to by
- * the child. If the child otherwise exits the parent will also exit.
+ * with it. Will relaunch the child if it receives a SIGUSR1 or SIGUSR2 or is
+ * asked to by the child. If the child otherwise exits the parent will also
+ * exit.
  */
 export class ParentProcess extends Process {
   public logger = logger.named(`parent:${process.pid}`)
@@ -227,12 +240,18 @@ export class ParentProcess extends Process {
       this.relaunch()
     })
 
+    process.on("SIGUSR2", async () => {
+      this.logger.info("Received SIGUSR2; hotswapping")
+      this.relaunch()
+    })
+
     const opts = {
       size: "10M",
       maxFiles: 10,
+      path: path.join(paths.data, "coder-logs"),
     }
-    this.logStdoutStream = rfs.createStream(path.join(paths.data, "coder-logs", "code-server-stdout.log"), opts)
-    this.logStderrStream = rfs.createStream(path.join(paths.data, "coder-logs", "code-server-stderr.log"), opts)
+    this.logStdoutStream = rfs.createStream("code-server-stdout.log", opts)
+    this.logStderrStream = rfs.createStream("code-server-stderr.log", opts)
 
     this.onDispose(() => this.disposeChild())
 
@@ -274,6 +293,10 @@ export class ParentProcess extends Process {
   }
 
   public start(args: DefaultedArgs): Promise<void> {
+    // Our logger was created before we parsed CLI arguments so update the level
+    // in case it has changed.
+    this.logger.level = logger.level
+
     // Store for relaunches.
     this.args = args
     if (!this.started) {
@@ -286,17 +309,21 @@ export class ParentProcess extends Process {
     const child = this.spawn()
     this.child = child
 
-    // Log both to stdout and to the log directory.
+    // Log child output to stdout/stderr and to the log directory.
     if (child.stdout) {
-      child.stdout.pipe(this.logStdoutStream)
-      child.stdout.pipe(process.stdout)
+      child.stdout.on("data", (data) => {
+        this.logStdoutStream.write(data)
+        process.stdout.write(data)
+      })
     }
     if (child.stderr) {
-      child.stderr.pipe(this.logStderrStream)
-      child.stderr.pipe(process.stderr)
+      child.stderr.on("data", (data) => {
+        this.logStderrStream.write(data)
+        process.stderr.write(data)
+      })
     }
 
-    this.logger.debug(`spawned inner process ${child.pid}`)
+    this.logger.debug(`spawned child process ${child.pid}`)
 
     await this.handshake(child)
 
@@ -307,12 +334,11 @@ export class ParentProcess extends Process {
   }
 
   private spawn(): cp.ChildProcess {
-    // Use spawn (instead of fork) to use the new binary in case it was updated.
-    return cp.spawn(process.argv[0], process.argv.slice(1), {
+    return cp.fork(path.join(__dirname, "entry"), {
       env: {
         ...process.env,
         CODE_SERVER_PARENT_PID: process.pid.toString(),
-        NODE_OPTIONS: `--max-old-space-size=2048 ${process.env.NODE_OPTIONS || ""}`,
+        NODE_EXEC_PATH: process.execPath,
       },
       stdio: ["pipe", "pipe", "pipe", "ipc"],
     })
@@ -325,13 +351,14 @@ export class ParentProcess extends Process {
     if (!this.args) {
       throw new Error("started without args")
     }
-    await onMessage<ChildMessage, ChildHandshakeMessage>(
+    const message = await onMessage<ChildMessage, ChildHandshakeMessage>(
       child,
       (message): message is ChildHandshakeMessage => {
         return message.type === "handshake"
       },
       this.logger,
     )
+    this.logger.debug("got message", field("message", message))
     this.send(child, { type: "handshake", args: this.args })
   }
 

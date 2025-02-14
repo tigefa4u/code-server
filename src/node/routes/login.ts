@@ -1,18 +1,18 @@
 import { Router, Request } from "express"
 import { promises as fs } from "fs"
 import { RateLimiter as Limiter } from "limiter"
-import * as os from "os"
 import * as path from "path"
 import { CookieKeys } from "../../common/http"
 import { rootPath } from "../constants"
 import { authenticated, getCookieOptions, redirect, replaceTemplates } from "../http"
-import { getPasswordMethod, handlePasswordValidation, humanPath, sanitizeString, escapeHtml } from "../util"
+import i18n from "../i18n"
+import { getPasswordMethod, handlePasswordValidation, sanitizeString, escapeHtml } from "../util"
 
 // RateLimiter wraps around the limiter library for logins.
 // It allows 2 logins every minute plus 12 logins every hour.
 export class RateLimiter {
-  private readonly minuteLimiter = new Limiter(2, "minute")
-  private readonly hourLimiter = new Limiter(12, "hour")
+  private readonly minuteLimiter = new Limiter({ tokensPerInterval: 2, interval: "minute" })
+  private readonly hourLimiter = new Limiter({ tokensPerInterval: 12, interval: "hour" })
 
   public canTry(): boolean {
     // Note: we must check using >= 1 because technically when there are no tokens left
@@ -28,17 +28,26 @@ export class RateLimiter {
 
 const getRoot = async (req: Request, error?: Error): Promise<string> => {
   const content = await fs.readFile(path.join(rootPath, "src/browser/pages/login.html"), "utf8")
-  let passwordMsg = `Check the config file at ${humanPath(os.homedir(), req.args.config)} for the password.`
+  const locale = req.args["locale"] || "en"
+  i18n.changeLanguage(locale)
+  const appName = req.args["app-name"] || "code-server"
+  const welcomeText = req.args["welcome-text"] || (i18n.t("WELCOME", { app: appName }) as string)
+  let passwordMsg = i18n.t("LOGIN_PASSWORD", { configFile: req.args.config })
   if (req.args.usingEnvPassword) {
-    passwordMsg = "Password was set from $PASSWORD."
+    passwordMsg = i18n.t("LOGIN_USING_ENV_PASSWORD")
   } else if (req.args.usingEnvHashedPassword) {
-    passwordMsg = "Password was set from $HASHED_PASSWORD."
+    passwordMsg = i18n.t("LOGIN_USING_HASHED_PASSWORD")
   }
 
   return replaceTemplates(
     req,
     content
+      .replace(/{{I18N_LOGIN_TITLE}}/g, i18n.t("LOGIN_TITLE", { app: appName }))
+      .replace(/{{WELCOME_TEXT}}/g, welcomeText)
       .replace(/{{PASSWORD_MSG}}/g, passwordMsg)
+      .replace(/{{I18N_LOGIN_BELOW}}/g, i18n.t("LOGIN_BELOW"))
+      .replace(/{{I18N_PASSWORD_PLACEHOLDER}}/g, i18n.t("PASSWORD_PLACEHOLDER"))
+      .replace(/{{I18N_SUBMIT}}/g, i18n.t("SUBMIT"))
       .replace(/{{ERROR}}/, error ? `<div class="error">${escapeHtml(error.message)}</div>` : ""),
   )
 }
@@ -59,18 +68,18 @@ router.get("/", async (req, res) => {
   res.send(await getRoot(req))
 })
 
-router.post<{}, string, { password: string; base?: string }, { to?: string }>("/", async (req, res) => {
-  const password = sanitizeString(req.body.password)
+router.post<{}, string, { password?: string; base?: string } | undefined, { to?: string }>("/", async (req, res) => {
+  const password = sanitizeString(req.body?.password)
   const hashedPasswordFromArgs = req.args["hashed-password"]
 
   try {
     // Check to see if they exceeded their login attempts
     if (!limiter.canTry()) {
-      throw new Error("Login rate limited!")
+      throw new Error(i18n.t("LOGIN_RATE_LIMIT") as string)
     }
 
     if (!password) {
-      throw new Error("Missing password")
+      throw new Error(i18n.t("MISS_PASSWORD") as string)
     }
 
     const passwordMethod = getPasswordMethod(hashedPasswordFromArgs)
@@ -104,7 +113,7 @@ router.post<{}, string, { password: string; base?: string }, { to?: string }>("/
       }),
     )
 
-    throw new Error("Incorrect password")
+    throw new Error(i18n.t("INCORRECT_PASSWORD") as string)
   } catch (error: any) {
     const renderedHtml = await getRoot(req, error)
     res.send(renderedHtml)

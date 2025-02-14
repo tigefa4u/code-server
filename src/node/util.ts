@@ -1,5 +1,4 @@
-import { logger } from "@coder/logger"
-import * as argon2 from "@node-rs/argon2"
+import * as argon2 from "argon2"
 import * as cp from "child_process"
 import * as crypto from "crypto"
 import envPaths from "env-paths"
@@ -10,7 +9,6 @@ import * as path from "path"
 import safeCompare from "safe-compare"
 import * as util from "util"
 import xdgBasedir from "xdg-basedir"
-import { vsRootPath } from "./constants"
 
 export interface Paths {
   data: string
@@ -88,20 +86,6 @@ export function getEnvPaths(platform = process.platform): Paths {
   }
 }
 
-/**
- * humanPath replaces the home directory in path with ~.
- * Makes it more readable.
- *
- * @param homedir - the home directory(i.e. `os.homedir()`)
- * @param path - a file path
- */
-export function humanPath(homedir: string, path?: string): string {
-  if (!path) {
-    return ""
-  }
-  return path.replace(homedir, "~")
-}
-
 export const generateCertificate = async (hostname: string): Promise<{ cert: string; certKey: string }> => {
   const certPath = path.join(paths.data, `${hostname.replace(/\./g, "_")}.crt`)
   const certKeyPath = path.join(paths.data, `${hostname.replace(/\./g, "_")}.key`)
@@ -157,12 +141,7 @@ export const generatePassword = async (length = 24): Promise<string> => {
  * Used to hash the password.
  */
 export const hash = async (password: string): Promise<string> => {
-  try {
-    return await argon2.hash(password)
-  } catch (error: any) {
-    logger.error(error)
-    return ""
-  }
+  return await argon2.hash(password)
 }
 
 /**
@@ -172,12 +151,7 @@ export const isHashMatch = async (password: string, hash: string) => {
   if (password === "" || hash === "" || !hash.startsWith("$")) {
     return false
   }
-  try {
-    return await argon2.verify(hash, password)
-  } catch (error: any) {
-    logger.error(error)
-    return false
-  }
+  return await argon2.verify(hash, password)
 }
 
 /**
@@ -388,11 +362,62 @@ export const getMediaMime = (filePath?: string): string => {
   return (filePath && mimeTypes[path.extname(filePath)]) || "text/plain"
 }
 
-export const isWsl = async (): Promise<boolean> => {
-  return (
-    (process.platform === "linux" && os.release().toLowerCase().indexOf("microsoft") !== -1) ||
-    (await fs.readFile("/proc/version", "utf8")).toLowerCase().indexOf("microsoft") !== -1
-  )
+/**
+ * A helper function that checks if the platform is Windows Subsystem for Linux
+ * (WSL)
+ *
+ * @see https://github.com/sindresorhus/is-wsl/blob/main/index.js
+ * @returns {Boolean} boolean if it is WSL
+ */
+export const isWsl = async (
+  platform: NodeJS.Platform,
+  osRelease: string,
+  procVersionFilePath: string,
+): Promise<boolean> => {
+  if (platform !== "linux") {
+    return false
+  }
+
+  if (osRelease.toLowerCase().includes("microsoft")) {
+    return true
+  }
+
+  try {
+    return (await fs.readFile(procVersionFilePath, "utf8")).toLowerCase().includes("microsoft")
+  } catch (_) {
+    return false
+  }
+}
+
+interface OpenOptions {
+  args: string[]
+  command: string
+  urlSearch: string
+}
+
+/**
+ * A helper function to construct options for `open` function.
+ *
+ * Extract to make it easier to test.
+ *
+ * @param platform - platform on machine
+ * @param urlSearch - url.search
+ * @returns  an object with args, command, options and urlSearch
+ */
+export function constructOpenOptions(platform: NodeJS.Platform | "wsl", urlSearch: string): OpenOptions {
+  const args: string[] = []
+  let command = platform === "darwin" ? "open" : "xdg-open"
+  if (platform === "win32" || platform === "wsl") {
+    command = platform === "wsl" ? "cmd.exe" : "cmd"
+    args.push("/c", "start", '""', "/b")
+    urlSearch = urlSearch.replace(/&/g, "^&")
+  }
+
+  return {
+    args,
+    command,
+    urlSearch,
+  }
 }
 
 /**
@@ -407,47 +432,16 @@ export const open = async (address: URL | string): Promise<void> => {
   if (url.hostname === "0.0.0.0") {
     url.hostname = "localhost"
   }
-  const args = [] as string[]
-  const options = {} as cp.SpawnOptions
-  const platform = (await isWsl()) ? "wsl" : process.platform
-  let command = platform === "darwin" ? "open" : "xdg-open"
-  if (platform === "win32" || platform === "wsl") {
-    command = platform === "wsl" ? "cmd.exe" : "cmd"
-    args.push("/c", "start", '""', "/b")
-    url.search = url.search.replace(/&/g, "^&")
-  }
-  const proc = cp.spawn(command, [...args, url.toString()], options)
+  const platform = (await isWsl(process.platform, os.release(), "/proc/version")) ? "wsl" : process.platform
+  const { command, args, urlSearch } = constructOpenOptions(platform, url.search)
+  url.search = urlSearch
+  const proc = cp.spawn(command, [...args, url.toString()], {})
   await new Promise<void>((resolve, reject) => {
     proc.on("error", reject)
     proc.on("close", (code) => {
       return code !== 0 ? reject(new Error(`Failed to open with code ${code}`)) : resolve()
     })
   })
-}
-
-/**
- * For iterating over an enum's values.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const enumToArray = (t: any): string[] => {
-  const values = [] as string[]
-  for (const k in t) {
-    values.push(t[k])
-  }
-  return values
-}
-
-/**
- * For displaying all allowed options in an enum.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const buildAllowedMessage = (t: any): string => {
-  const values = enumToArray(t)
-  return `Allowed value${values.length === 1 ? " is" : "s are"} ${values.map((t) => `'${t}'`).join(", ")}`
-}
-
-export const isObject = <T extends object>(obj: T): obj is T => {
-  return !Array.isArray(obj) && typeof obj === "object" && obj !== null
 }
 
 /**
@@ -468,6 +462,15 @@ export const isFile = async (path: string): Promise<boolean> => {
   try {
     const stat = await fs.stat(path)
     return stat.isFile()
+  } catch (error) {
+    return false
+  }
+}
+
+export const isDirectory = async (path: string): Promise<boolean> => {
+  try {
+    const stat = await fs.stat(path)
+    return stat.isDirectory()
   } catch (error) {
     return false
   }
@@ -499,27 +502,12 @@ export function isNodeJSErrnoException(error: unknown): error is NodeJS.ErrnoExc
 // TODO: Replace with proper templating system.
 export const escapeJSON = (value: cp.Serializable) => JSON.stringify(value).replace(/"/g, "&quot;")
 
-type AMDModule<T> = { [exportName: string]: T }
-
 /**
- * Loads AMD module, typically from a compiled VSCode bundle.
- *
- * @deprecated This should be gradually phased out as code-server migrates to lib/vscode
- * @param amdPath Path to module relative to lib/vscode
- * @param exportName Given name of export in the file
+ * Split a string on the first equals.  The result will always be an array with
+ * two items regardless of how many equals there are.  The second item will be
+ * undefined if empty or missing.
  */
-export const loadAMDModule = async <T>(amdPath: string, exportName: string): Promise<T> => {
-  // Set default remote native node modules path, if unset
-  process.env["VSCODE_INJECT_NODE_MODULE_LOOKUP_PATH"] =
-    process.env["VSCODE_INJECT_NODE_MODULE_LOOKUP_PATH"] || path.join(vsRootPath, "remote", "node_modules")
-
-  require(path.join(vsRootPath, "out/bootstrap-node")).injectNodeModuleLookupPath(
-    process.env["VSCODE_INJECT_NODE_MODULE_LOOKUP_PATH"],
-  )
-
-  const module = await new Promise<AMDModule<T>>((resolve, reject) => {
-    require(path.join(vsRootPath, "out/bootstrap-amd")).load(amdPath, resolve, reject)
-  })
-
-  return module[exportName] as T
+export function splitOnFirstEquals(str: string): [string, string | undefined] {
+  const split = str.split(/=(.+)?/, 2)
+  return [split[0], split[1]]
 }
